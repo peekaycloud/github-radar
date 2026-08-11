@@ -22,12 +22,21 @@ def get_database_url() -> str:
         raise RuntimeError(
             "DATABASE_URL is not set. Copy .env.example to .env.local and fill values."
         )
+    # GitHub Actions (and many CI runners) cannot reach IPv6-only Supabase
+    # direct hosts. Prefer the pooler URL in DATABASE_URL for CI.
+    if "sslmode=" not in url:
+        url += ("&" if "?" in url else "?") + "sslmode=require"
     return url
 
 
 @contextmanager
 def get_connection(*, autocommit: bool = False) -> Iterator[psycopg.Connection]:
-    conn = psycopg.connect(get_database_url(), row_factory=dict_row, autocommit=autocommit)
+    conn = psycopg.connect(
+        get_database_url(),
+        row_factory=dict_row,
+        autocommit=autocommit,
+        connect_timeout=30,
+    )
     try:
         yield conn
     finally:
