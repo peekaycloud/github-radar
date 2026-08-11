@@ -29,9 +29,12 @@ export default async function RepoDetailPage({
   ]);
 
   const growthSnapshots = snapshots.map((s) => ({
-    capturedAt: s.captured_at,
-    stars: s.stars,
-    forks: s.forks,
+    capturedAt:
+      typeof s.captured_at === "string"
+        ? s.captured_at
+        : new Date(s.captured_at as string | number | Date).toISOString(),
+    stars: s.stars == null ? null : Number(s.stars),
+    forks: s.forks == null ? null : Number(s.forks),
   }));
 
   const first = mentions[0];

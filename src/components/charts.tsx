@@ -80,13 +80,16 @@ export function GrowthPanel({ snapshots }: { snapshots: SnapshotPoint[] }) {
   const allPoints = useMemo(
     () =>
       snapshots
-        .filter((s) => s.stars != null && Number.isFinite(s.stars))
-        .map((s) => ({
-          iso: s.capturedAt,
-          t: new Date(s.capturedAt).getTime(),
-          stars: s.stars as number,
-        }))
-        .filter((s) => !Number.isNaN(s.t))
+        .map((s) => {
+          const stars = Number(s.stars);
+          const t = new Date(s.capturedAt).getTime();
+          return {
+            iso: s.capturedAt,
+            t,
+            stars,
+          };
+        })
+        .filter((s) => Number.isFinite(s.stars) && Number.isFinite(s.t))
         .sort((a, b) => a.t - b.t),
     [snapshots]
   );
