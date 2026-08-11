@@ -50,13 +50,19 @@ export function EditorialRadarCard({
               {name}
             </Link>
             <span className="font-mono text-sm tabular-nums text-[var(--ink)]">
-              ★ {formatNumber(repo.stars)}
-              {growth != null ? (
-                <span className="ml-2 text-[var(--signal)]">
-                  {growth > 0 ? "↑" : "↓"}
-                  {Math.abs(growth).toFixed(0)}%
-                </span>
-              ) : null}
+              {repo.stars != null ? (
+                <>
+                  ★ {formatNumber(repo.stars)}
+                  {growth != null ? (
+                    <span className="ml-2 text-[var(--signal)]">
+                      {growth > 0 ? "↑" : "↓"}
+                      {Math.abs(growth).toFixed(0)}%
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                <span className="text-[var(--ink-faint)]">Enriching…</span>
+              )}
             </span>
           </div>
 
