@@ -48,6 +48,11 @@ export async function getTodaysRadar(limit = 12): Promise<DiscoveryRow[]> {
         THEN ((COALESCE(d.stars, 0) - snap30.stars)::float / snap30.stars::float) * 100.0
         ELSE NULL
       END AS stars_pct_growth_30d,
+      CASE
+        WHEN snap_span.min_stars IS NOT NULL AND snap_span.min_stars > 0
+        THEN ((snap_span.max_stars - snap_span.min_stars)::float / snap_span.min_stars::float) * 100.0
+        ELSE NULL
+      END AS stars_pct_growth_observed,
       sad.stars_at_discovery
     FROM v_repository_discovery d
     LEFT JOIN v_discovery_score ds ON ds.repository_id = d.repository_id
@@ -61,6 +66,11 @@ export async function getTodaysRadar(limit = 12): Promise<DiscoveryRow[]> {
       ORDER BY s.captured_at DESC
       LIMIT 1
     ) snap30 ON TRUE
+    LEFT JOIN LATERAL (
+      SELECT MIN(s.stars) AS min_stars, MAX(s.stars) AS max_stars
+      FROM github_repo_snapshots s
+      WHERE s.repository_id = d.repository_id
+    ) snap_span ON TRUE
     WHERE d.first_discovered_at IS NOT NULL
     ORDER BY d.first_discovered_at DESC NULLS LAST
     LIMIT ${limit}
@@ -171,6 +181,7 @@ export async function getFastestMoving(limit = 5): Promise<FastMover[]> {
     FROM snap s
     JOIN v_repository_discovery d ON d.repository_id = s.repository_id
     LEFT JOIN v_repository_growth g ON g.repository_id = d.repository_id
+    WHERE COALESCE(g.stars_pct_growth_7d, s.pct) >= 1
     ORDER BY COALESCE(g.stars_pct_growth_7d, s.pct) DESC NULLS LAST
     LIMIT ${limit}
   `;

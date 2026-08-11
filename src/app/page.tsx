@@ -142,13 +142,15 @@ export default async function HomePage() {
                   Growth rankings unlock as daily snapshots accumulate.
                 </p>
               ) : (
-                fastest.map((repo) => (
-                  <CompactRepoRow
-                    key={repo.repository_id}
-                    repo={repo}
-                    metric={`+${repo.pct_growth_observed.toFixed(0)}%`}
-                  />
-                ))
+                fastest
+                  .filter((repo) => Number(repo.pct_growth_observed) >= 1)
+                  .map((repo) => (
+                    <CompactRepoRow
+                      key={repo.repository_id}
+                      repo={repo}
+                      metric={`+${Number(repo.pct_growth_observed).toFixed(0)}%`}
+                    />
+                  ))
               )}
             </div>
           </div>
@@ -162,15 +164,16 @@ export default async function HomePage() {
                 </p>
               ) : (
                 gems.map((repo) => {
-                  const pct =
-                    repo.stars_pct_growth_7d ?? repo.stars_pct_growth_observed ?? null;
+                  const pct = Number(
+                    repo.stars_pct_growth_7d ?? repo.stars_pct_growth_observed ?? 0
+                  );
                   return (
                     <CompactRepoRow
                       key={repo.repository_id}
                       repo={repo}
                       metric={
-                        pct != null && pct > 0
-                          ? `+${Number(pct).toFixed(0)}%`
+                        pct >= 1
+                          ? `+${pct.toFixed(0)}%`
                           : `★ ${formatNumber(repo.stars)}`
                       }
                     />

@@ -9,6 +9,7 @@ import {
   getRepoSnapshots,
   getRepository,
 } from "@/lib/queries";
+import { buildWhyItMatters, signalLevel } from "@/lib/signals";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,8 @@ export default async function RepoDetailPage({
   const first = mentions[0];
   const last = mentions[mentions.length - 1];
   const channel = first?.source_channel || "githubtrending";
+  const why = buildWhyItMatters({ ...repository, categories });
+  const level = signalLevel(repository);
 
   return (
     <div className="space-y-12">
@@ -82,6 +85,47 @@ export default async function RepoDetailPage({
         ) : null}
       </header>
 
+      <section className="border-2 border-[var(--rule-strong)] border-l-[3px] border-l-[var(--signal)] bg-[var(--paper-elevated)] px-5 py-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--signal)]">
+            Why it’s on the radar
+          </p>
+          <p
+            className={
+              level === "High"
+                ? "font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--signal)]"
+                : "font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-muted)]"
+            }
+          >
+            Signal · {level}
+          </p>
+        </div>
+        <ul className="mt-3 space-y-1.5 font-sans text-sm text-[var(--ink-muted)]">
+          {why.map((s) => (
+            <li key={s.label}>
+              <span className="text-[var(--ink-faint)]">{s.label}: </span>
+              <span
+                className={
+                  s.tone === "signal"
+                    ? "text-[var(--signal)]"
+                    : s.tone === "ink"
+                      ? "text-[var(--ink)]"
+                      : undefined
+                }
+              >
+                {s.value}
+              </span>
+            </li>
+          ))}
+        </ul>
+        {repository.stars_at_discovery != null && repository.stars != null ? (
+          <p className="mt-4 font-mono text-sm tabular-nums text-[var(--ink)]">
+            <span className="text-[var(--ink-faint)]">Stars at discovery → now · </span>
+            {formatNumber(repository.stars_at_discovery)} → {formatNumber(repository.stars)}
+          </p>
+        ) : null}
+      </section>
+
       <section className="grid gap-8 lg:grid-cols-3">
         <Meta
           label="Repository age"
@@ -96,8 +140,12 @@ export default async function RepoDetailPage({
           value={formatDate(repository.pushed_at_github)}
         />
         <Meta
-          label="Enrichment"
-          value={repository.enrichment_status || "pending"}
+          label="Early discovery"
+          value={
+            repository.days_to_discovery != null
+              ? `${Math.round(repository.days_to_discovery)}d after creation`
+              : "—"
+          }
         />
       </section>
 
