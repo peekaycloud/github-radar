@@ -15,7 +15,14 @@ type Point = {
   stars?: number | null;
   forks?: number | null;
   mentions?: number | null;
+  label?: string;
 };
+
+function formatStars(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return "—";
+  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return Math.round(n).toLocaleString();
+}
 
 export function GrowthChart({
   data,
@@ -24,43 +31,88 @@ export function GrowthChart({
   data: Point[];
   metric?: "stars" | "forks" | "mentions";
 }) {
-  if (!data.length) {
+  const points = data.filter((d) => d[metric] != null);
+
+  if (points.length === 0) {
     return (
-      <p className="border border-dashed border-[var(--rule)] px-4 py-10 text-center font-sans text-sm text-[var(--ink-muted)]">
-        No historical snapshots yet. Snapshots are created during enrichment.
-      </p>
+      <div className="border border-dashed border-[var(--rule-strong)] px-4 py-8">
+        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-faint)]">
+          Star tracking
+        </p>
+        <p className="mt-2 font-serif text-lg text-[var(--ink)]">
+          No snapshots yet
+        </p>
+        <p className="mt-1 max-w-lg font-sans text-sm text-[var(--ink-muted)]">
+          Growth curves appear after daily enrichment captures at least two
+          star counts over time. We don’t invent history before the first
+          scrape.
+        </p>
+      </div>
+    );
+  }
+
+  if (points.length === 1) {
+    const only = points[0];
+    return (
+      <div className="border-2 border-[var(--rule-strong)] bg-[var(--paper-elevated)] px-5 py-6">
+        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-faint)]">
+          Star tracking · baseline
+        </p>
+        <p className="mt-3 font-serif text-3xl font-semibold tabular-nums text-[var(--ink)]">
+          ★ {formatStars(only[metric] as number)}
+        </p>
+        <p className="mt-2 font-sans text-sm text-[var(--ink-muted)]">
+          First snapshot on <strong className="text-[var(--ink)]">{only.date}</strong>.
+          A trend line needs a second enrichment pass — usually after the next
+          daily scrape.
+        </p>
+      </div>
     );
   }
 
   return (
-    <div className="h-72 w-full border border-[var(--rule)] bg-[var(--paper-elevated)] p-3">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <CartesianGrid stroke="#c9cdc4" strokeDasharray="3 3" />
-          <XAxis
-            dataKey="date"
-            tick={{ fill: "#4a4f47", fontSize: 11 }}
-            stroke="#c9cdc4"
-          />
-          <YAxis tick={{ fill: "#4a4f47", fontSize: 11 }} stroke="#c9cdc4" />
-          <Tooltip
-            contentStyle={{
-              background: "#f5f6f2",
-              border: "1px solid #c9cdc4",
-              borderRadius: 0,
-              fontSize: 12,
-            }}
-          />
-          <Line
-            type="monotone"
-            dataKey={metric}
-            stroke="#171a16"
-            strokeWidth={1.5}
-            dot={false}
-            isAnimationActive={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
+    <div className="space-y-2">
+      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
+        Star snapshots · {points.length} points
+      </p>
+      <div className="h-72 w-full border border-[var(--rule-strong)] bg-[var(--paper-elevated)] p-3">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={points}>
+            <CartesianGrid stroke="var(--rule)" strokeDasharray="3 3" />
+            <XAxis
+              dataKey="date"
+              tick={{ fill: "var(--ink-muted)", fontSize: 11 }}
+              stroke="var(--rule)"
+            />
+            <YAxis
+              tick={{ fill: "var(--ink-muted)", fontSize: 11 }}
+              stroke="var(--rule)"
+              width={48}
+              tickFormatter={(v) => formatStars(Number(v))}
+            />
+            <Tooltip
+              contentStyle={{
+                background: "var(--paper-elevated)",
+                border: "1px solid var(--rule-strong)",
+                borderRadius: 0,
+                fontSize: 12,
+              }}
+              formatter={(value) => [
+                `★ ${formatStars(typeof value === "number" ? value : Number(value))}`,
+                "Stars",
+              ]}
+            />
+            <Line
+              type="monotone"
+              dataKey={metric}
+              stroke="var(--ink)"
+              strokeWidth={1.5}
+              dot={{ r: points.length < 8 ? 3 : 0, fill: "var(--ink)" }}
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

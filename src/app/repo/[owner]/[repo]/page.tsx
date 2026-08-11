@@ -201,6 +201,12 @@ export default async function RepoDetailPage({
           Growth
         </h2>
         <GrowthChart data={chartData} metric="stars" />
+        {snapshots.length > 0 && snapshots.length < 2 ? (
+          <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--ink-faint)]">
+            Snapshot history starts at first enrichment — not Telegram discovery
+            date
+          </p>
+        ) : null}
       </section>
 
       <section>
