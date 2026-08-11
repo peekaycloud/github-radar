@@ -16,16 +16,6 @@ function growthPct(repo: DiscoveryRow): number | null {
   return null;
 }
 
-function growthWindow(repo: DiscoveryRow): string {
-  if (repo.stars_pct_growth_30d != null && Math.abs(Number(repo.stars_pct_growth_30d)) >= 1) {
-    return "30d";
-  }
-  if (repo.stars_pct_growth_7d != null && Math.abs(Number(repo.stars_pct_growth_7d)) >= 1) {
-    return "7d";
-  }
-  return "observed";
-}
-
 export function EditorialRadarCard({
   repo,
   index,
@@ -45,8 +35,8 @@ export function EditorialRadarCard({
       : null;
 
   return (
-    <article className="border-b border-[var(--rule)] py-3 first:pt-1 last:border-b-0">
-      <div className="grid gap-2 sm:grid-cols-[2rem_1fr_auto] sm:items-start sm:gap-4">
+    <article className="border-b border-[var(--rule)] py-2.5 first:pt-1 last:border-b-0">
+      <div className="grid gap-1 sm:grid-cols-[2rem_1fr_auto] sm:items-start sm:gap-3">
         <p className="font-mono text-xs font-medium tabular-nums text-[var(--signal)]">
           {String(index).padStart(2, "0")}
         </p>
@@ -61,6 +51,12 @@ export function EditorialRadarCard({
             </Link>
             <span className="font-mono text-sm tabular-nums text-[var(--ink)]">
               ★ {formatNumber(repo.stars)}
+              {growth != null ? (
+                <span className="ml-2 text-[var(--signal)]">
+                  {growth > 0 ? "↑" : "↓"}
+                  {Math.abs(growth).toFixed(0)}%
+                </span>
+              ) : null}
             </span>
           </div>
 
@@ -79,33 +75,17 @@ export function EditorialRadarCard({
               <span className="text-[var(--ink-muted)]">{repo.language}</span>
             ) : null}
             <span>Discovered {formatDateShort(repo.first_discovered_at)}</span>
-            {growth != null ? (
-              <span className="text-[var(--signal)]">
-                {growth > 0 ? "+" : ""}
-                {growth.toFixed(0)}% / {growthWindow(repo)}
-              </span>
-            ) : null}
           </div>
         </div>
 
-        <aside className="hidden w-[6.75rem] shrink-0 text-right sm:block">
-          {growth != null ? (
-            <>
-              <p className="font-serif text-lg font-semibold tabular-nums leading-none text-[var(--signal)]">
-                {growth > 0 ? "+" : ""}
-                {growth.toFixed(0)}%
-              </p>
-              <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
-                {growthWindow(repo)} growth
-              </p>
-            </>
-          ) : earlyDays != null ? (
+        <aside className="hidden w-[7.25rem] shrink-0 text-right sm:block">
+          {earlyDays != null ? (
             <>
               <p className="font-serif text-lg font-semibold tabular-nums leading-none text-[var(--signal)]">
                 {earlyDays}d
               </p>
-              <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
-                creation → discovery
+              <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.12em] text-[var(--ink-faint)]">
+                Created → discovered
               </p>
             </>
           ) : (
@@ -113,7 +93,7 @@ export function EditorialRadarCard({
               <p className="font-serif text-base font-semibold leading-none text-[var(--ink)]">
                 {formatDateShort(repo.first_discovered_at)}
               </p>
-              <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
+              <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.12em] text-[var(--ink-faint)]">
                 Discovered
               </p>
             </>
@@ -133,9 +113,9 @@ export function MomentumBars({
   const max = Math.max(...items.map((i) => Math.abs(i.delta) || i.recent), 1);
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-2">
       {items.map((item) => (
-        <div key={item.name} className="grid grid-cols-[7rem_1fr_5.5rem] items-center gap-2">
+        <div key={item.name} className="grid grid-cols-[6.5rem_1fr_5rem] items-center gap-2">
           <span className="truncate font-sans text-sm text-[var(--ink)]">{item.name}</span>
           <div className="h-[5px] bg-[var(--rule)]/40">
             <div
@@ -157,28 +137,51 @@ export function MomentumBars({
 export function CompactRepoRow({
   repo,
   metric,
-  metricLabel,
 }: {
   repo: DiscoveryRow;
   metric: string;
-  metricLabel?: string;
 }) {
   const name = repo.full_name || `${repo.owner}/${repo.repo_name}`;
   const href = `/repo/${repo.owner}/${repo.repo_name}`;
   return (
     <Link
       href={href}
-      className="flex items-baseline justify-between gap-3 border-b border-[var(--rule)] py-2 last:border-b-0 hover:bg-[var(--paper-elevated)]"
+      className="flex items-baseline justify-between gap-3 border-b border-[var(--rule)] py-1.5 last:border-b-0 hover:bg-[var(--paper-elevated)]"
     >
       <span className="min-w-0 truncate font-sans text-sm text-[var(--ink)]">{name}</span>
-      <span className="shrink-0 text-right">
-        <span className="font-mono text-sm tabular-nums text-[var(--signal)]">{metric}</span>
-        {metricLabel ? (
-          <span className="ml-1 font-mono text-[9px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
-            {metricLabel}
-          </span>
-        ) : null}
+      <span className="shrink-0 font-mono text-sm tabular-nums text-[var(--signal)]">
+        {metric}
       </span>
     </Link>
+  );
+}
+
+export function MomentumWindowTabs({
+  active,
+}: {
+  active: 7 | 30 | 90;
+}) {
+  const tabs: { days: 7 | 30 | 90; label: string }[] = [
+    { days: 7, label: "7D" },
+    { days: 30, label: "30D" },
+    { days: 90, label: "90D" },
+  ];
+  return (
+    <div className="flex gap-3 font-mono text-[10px] uppercase tracking-[0.14em]">
+      {tabs.map((t) => (
+        <Link
+          key={t.days}
+          href={t.days === 30 ? "/" : `/?m=${t.days}d`}
+          scroll={false}
+          className={
+            active === t.days
+              ? "text-[var(--signal)]"
+              : "text-[var(--ink-faint)] hover:text-[var(--ink)]"
+          }
+        >
+          {t.label}
+        </Link>
+      ))}
+    </div>
   );
 }

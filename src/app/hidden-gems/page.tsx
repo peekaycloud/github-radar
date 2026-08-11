@@ -1,8 +1,18 @@
-import { EmptyState, RepoCard, SectionRule } from "@/components/repo-card";
-import { getHiddenGems } from "@/lib/queries";
+import { EmptyState, SectionRule } from "@/components/repo-card";
+import { formatDateShort, formatNumber, getHiddenGems } from "@/lib/queries";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+
+function daysAgo(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  const days = Math.max(0, Math.round((Date.now() - d.getTime()) / 86_400_000));
+  if (days === 0) return "today";
+  if (days === 1) return "1d ago";
+  return `${days}d ago`;
+}
 
 export default async function HiddenGemsPage({
   searchParams,
@@ -16,19 +26,79 @@ export default async function HiddenGemsPage({
 
   return (
     <div className="space-y-8">
-      <SectionRule title="Hidden Gems" kicker="Small today. Growing fast." />
+      <SectionRule title="Hidden Gems" kicker="Small · selective" />
       <p className="max-w-2xl font-sans text-sm leading-relaxed text-[var(--ink-muted)]">
-        Selective by design: under 2K stars, non-fork, active or discovered in
-        the last 30 days, plus a growth or freshness signal. Roughly the top
-        fraction of the archive — not every small repo.
+        Under 2K stars, non-fork, active or discovered in the last 30 days, plus
+        a growth or freshness signal. Not every small repo qualifies.
       </p>
       {rows.length === 0 ? (
         <EmptyState message="Gem rankings unlock after enrichment produces growth snapshots." />
       ) : (
-        <div>
-          {rows.map((repo) => (
-            <RepoCard key={repo.repository_id} repo={repo} emphasis="gem" />
-          ))}
+        <div className="border-t-2 border-[var(--rule-strong)]">
+          {rows.map((repo) => {
+            const name = repo.full_name || `${repo.owner}/${repo.repo_name}`;
+            const href = `/repo/${repo.owner}/${repo.repo_name}`;
+            const ago = daysAgo(repo.first_discovered_at);
+            const early =
+              repo.days_to_discovery != null &&
+              repo.days_to_discovery >= 0 &&
+              repo.days_to_discovery <= 90;
+            const rising =
+              Number(repo.stars_pct_growth_7d ?? repo.stars_pct_growth_observed ?? 0) >= 3;
+            const active =
+              repo.discovery_age_days != null && repo.discovery_age_days <= 30;
+
+            return (
+              <article
+                key={repo.repository_id}
+                className="border-b border-[var(--rule)] py-4"
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                  <Link
+                    href={href}
+                    className="font-serif text-xl font-semibold tracking-tight hover:underline decoration-[var(--signal)] underline-offset-2"
+                  >
+                    {name}
+                  </Link>
+                  <span className="font-mono text-sm tabular-nums text-[var(--ink)]">
+                    {formatNumber(repo.stars)} ★
+                    {ago ? (
+                      <span className="ml-3 text-[var(--ink-faint)]">
+                        · discovered {ago}
+                      </span>
+                    ) : null}
+                  </span>
+                </div>
+                {repo.description ? (
+                  <p className="mt-1 line-clamp-2 font-sans text-sm text-[var(--ink-muted)]">
+                    {repo.description}
+                  </p>
+                ) : null}
+                <div className="mt-2 flex flex-wrap gap-2 font-mono text-[10px] uppercase tracking-[0.12em]">
+                  {early ? (
+                    <span className="border border-[var(--signal)] px-1.5 py-0.5 text-[var(--signal)]">
+                      Early
+                    </span>
+                  ) : null}
+                  {active ? (
+                    <span className="border border-[var(--rule-strong)] px-1.5 py-0.5 text-[var(--ink-muted)]">
+                      Active
+                    </span>
+                  ) : null}
+                  {rising ? (
+                    <span className="border border-[var(--signal)] px-1.5 py-0.5 text-[var(--signal)]">
+                      Rising
+                    </span>
+                  ) : null}
+                  {!early && !active && !rising ? (
+                    <span className="text-[var(--ink-faint)]">
+                      Discovered {formatDateShort(repo.first_discovered_at)}
+                    </span>
+                  ) : null}
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
       <div className="flex justify-between font-sans text-xs uppercase tracking-[0.12em]">

@@ -4,42 +4,57 @@ import {
   CompactRepoRow,
   EditorialRadarCard,
   MomentumBars,
+  MomentumWindowTabs,
 } from "@/components/radar-editorial";
 import {
   formatNumber,
   getCategoryMomentum,
+  getDiscoverySpotlight,
   getFastestMoving,
-  getHiddenGems,
   getIntelligenceStats,
   getTodaysRadar,
+  type MomentumWindow,
 } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
-  const [stats, radar, gems, momentum, fastest] = await Promise.all([
+function parseMomentumWindow(raw?: string): MomentumWindow {
+  if (raw === "7d") return 7;
+  if (raw === "90d") return 90;
+  return 30;
+}
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ m?: string }>;
+}) {
+  const params = await searchParams;
+  const windowDays = parseMomentumWindow(params.m);
+
+  const [stats, radar, momentum, fastest, spotlight] = await Promise.all([
     getIntelligenceStats(),
     getTodaysRadar(4),
-    getHiddenGems(5),
-    getCategoryMomentum(6),
+    getCategoryMomentum(6, windowDays),
     getFastestMoving(5),
+    getDiscoverySpotlight(),
   ]);
 
   const kpis: { label: string; value: string; hint?: string }[] = [
     { label: "Repos", value: formatNumber(stats.total_repositories) },
     {
-      label: "Discoveries",
+      label: "New repos",
       value: formatNumber(stats.discoveries_this_month),
       hint: "30 days",
     },
     { label: "Hidden gems", value: formatNumber(stats.hidden_gems) },
     {
-      label: "Median discovery age",
+      label: "Median age",
       value:
         stats.median_discovery_age_days != null
           ? `${Math.round(stats.median_discovery_age_days)}d`
           : "—",
-      hint: "GitHub creation → discovery",
+      hint: "created → discovered",
     },
   ];
 
@@ -50,31 +65,26 @@ export default async function HomePage() {
     });
   }
 
-  const topCategory = momentum[0];
-  const storyBits = [
-    `This week the channels surfaced ${formatNumber(stats.discoveries_this_week)} new repositories.`,
-    topCategory
-      ? `${topCategory.name} led category momentum (${topCategory.delta > 0 ? "+" : ""}${topCategory.delta} repos vs prior 30 days).`
-      : null,
-    stats.crossed_1k_this_week > 0
-      ? `${formatNumber(stats.crossed_1k_this_week)} recent finds crossed 1K stars since first snapshot.`
-      : null,
-    stats.median_discovery_age_days != null
-      ? `Median discovery age is ${Math.round(stats.median_discovery_age_days)} days — Ahead of Curve tracks the early exceptions.`
-      : null,
-  ].filter(Boolean) as string[];
+  const spotlightName =
+    spotlight?.full_name ||
+    (spotlight ? `${spotlight.owner}/${spotlight.repo_name}` : null);
+  const spotlightDays =
+    spotlight?.days_to_discovery != null
+      ? Math.round(spotlight.days_to_discovery)
+      : null;
+  const spotlightMultiple =
+    spotlight?.growth_multiple != null && Number.isFinite(spotlight.growth_multiple)
+      ? spotlight.growth_multiple
+      : null;
 
   return (
-    <div className="space-y-8">
-      {/* Compact KPI strip */}
+    <div className="space-y-7">
       <section>
         <div
           className={`grid gap-px border-2 border-[var(--rule-strong)] bg-[var(--rule-strong)] ${
             kpis.length === 5
               ? "grid-cols-2 sm:grid-cols-5"
-              : kpis.length === 4
-                ? "grid-cols-2 sm:grid-cols-4"
-                : "grid-cols-2 sm:grid-cols-3"
+              : "grid-cols-2 sm:grid-cols-4"
           }`}
         >
           {kpis.map((k) => (
@@ -95,7 +105,6 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Today's Radar — compact feed */}
       <section>
         <SectionRule title="Today’s Radar" kicker="Latest discoveries" href="/timeline" />
         {radar.length === 0 ? (
@@ -109,97 +118,119 @@ export default async function HomePage() {
         )}
       </section>
 
-      {/* Trending signals */}
-      <section className="grid gap-6 lg:grid-cols-2">
+      {/* Single two-column intelligence block */}
+      <section className="grid gap-6 border-t border-[var(--rule)] pt-6 lg:grid-cols-2 lg:gap-8">
         <div>
           <SectionRule
             title="What’s accelerating"
-            kicker="Trending signals"
+            kicker="Trending categories"
             href="/trends"
+            compact
           />
-          <div className="border border-[var(--rule-strong)] bg-[var(--paper-elevated)] p-4">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
+              Additional repos vs prior {windowDays}d
+            </p>
+            <MomentumWindowTabs active={windowDays} />
+          </div>
+          <div className="border border-[var(--rule-strong)] bg-[var(--paper-elevated)] p-3.5">
             {momentum.length === 0 ? (
               <p className="font-sans text-sm text-[var(--ink-muted)]">
                 Category momentum appears as classifications accumulate.
               </p>
             ) : (
-              <>
-                <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
-                  Additional repos discovered vs prior 30 days
-                </p>
-                <MomentumBars items={momentum} />
-              </>
+              <MomentumBars items={momentum} />
             )}
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div>
-            <SectionRule title="Fastest moving" kicker="Observed growth" href="/trending" />
-            <div className="border border-[var(--rule-strong)] px-3">
-              {fastest.length === 0 ? (
-                <p className="py-3 font-sans text-sm text-[var(--ink-muted)]">
-                  Growth rankings unlock as daily snapshots accumulate.
-                </p>
-              ) : (
-                fastest
-                  .filter((repo) => Number(repo.pct_growth_observed) >= 1)
-                  .map((repo) => (
-                    <CompactRepoRow
-                      key={repo.repository_id}
-                      repo={repo}
-                      metric={`+${Number(repo.pct_growth_observed).toFixed(0)}%`}
-                    />
-                  ))
-              )}
-            </div>
-          </div>
-
-          <div>
-            <SectionRule title="Hidden gems" kicker="Small · selective" href="/hidden-gems" />
-            <div className="border border-[var(--rule-strong)] px-3">
-              {gems.length === 0 ? (
-                <p className="py-3 font-sans text-sm text-[var(--ink-muted)]">
-                  Selective gems need modest stars plus a growth or freshness signal.
-                </p>
-              ) : (
-                gems.map((repo) => {
-                  const pct = Number(
-                    repo.stars_pct_growth_7d ?? repo.stars_pct_growth_observed ?? 0
-                  );
-                  return (
-                    <CompactRepoRow
-                      key={repo.repository_id}
-                      repo={repo}
-                      metric={
-                        pct >= 1
-                          ? `+${pct.toFixed(0)}%`
-                          : `★ ${formatNumber(repo.stars)}`
-                      }
-                    />
-                  );
-                })
-              )}
-            </div>
+        <div>
+          <SectionRule
+            title="Fastest moving"
+            kicker="Star growth · observed"
+            href="/trending"
+            compact
+          />
+          <div className="border border-[var(--rule-strong)] px-3">
+            {fastest.length === 0 ? (
+              <p className="py-3 font-sans text-sm text-[var(--ink-muted)]">
+                Growth rankings unlock as daily snapshots accumulate.
+              </p>
+            ) : (
+              fastest.map((repo) => (
+                <CompactRepoRow
+                  key={repo.repository_id}
+                  repo={repo}
+                  metric={`+${Number(repo.pct_growth_observed).toFixed(0)}% ★`}
+                />
+              ))
+            )}
           </div>
         </div>
       </section>
 
-      {/* Discovery story */}
+      {/* Compact discovery story — one observation */}
       <section>
-        <SectionRule title="Discovery story" kicker="This week" />
-        <div className="border-2 border-[var(--rule-strong)] border-l-[3px] border-l-[var(--signal)] bg-[var(--paper-elevated)] px-4 py-4">
-          <p className="font-serif text-lg leading-snug text-[var(--ink)] sm:text-xl">
-            {storyBits.join(" ")}
-          </p>
-          <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
-            <Link href="/ahead-of-curve" className="text-[var(--signal)] hover:underline">
-              Ahead of Curve →
-            </Link>
-            <span className="mx-2 text-[var(--rule)]">·</span>
-            Early discovery & star trajectory live on a dedicated page
-          </p>
-        </div>
+        <SectionRule title="Discovery story" kicker="Spotlight" compact />
+        {spotlight && spotlightName ? (
+          <div className="border-2 border-[var(--rule-strong)] border-l-[3px] border-l-[var(--signal)] bg-[var(--paper-elevated)] px-4 py-3.5">
+            <p className="font-serif text-lg leading-snug text-[var(--ink)]">
+              The channel spotted{" "}
+              <Link
+                href={`/repo/${spotlight.owner}/${spotlight.repo_name}`}
+                className="underline decoration-[var(--signal)] underline-offset-2"
+              >
+                {spotlightName}
+              </Link>
+              {spotlightDays != null ? (
+                <>
+                  {" "}
+                  {spotlightDays} days after creation
+                  {spotlight.stars_at_discovery != null ? (
+                    <>, when it had {formatNumber(spotlight.stars_at_discovery)} stars</>
+                  ) : null}
+                  .
+                </>
+              ) : (
+                "."
+              )}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 font-mono text-xs tabular-nums text-[var(--ink)]">
+              {spotlight.stars_at_discovery != null ? (
+                <span>
+                  <span className="text-[var(--ink-faint)]">At discovery </span>
+                  {formatNumber(spotlight.stars_at_discovery)} ★
+                </span>
+              ) : null}
+              <span>
+                <span className="text-[var(--ink-faint)]">Today </span>
+                {formatNumber(spotlight.stars)} ★
+              </span>
+              {spotlightMultiple != null && spotlightMultiple >= 1.1 ? (
+                <span className="text-[var(--signal)]">
+                  {spotlightMultiple.toFixed(1)}× growth
+                </span>
+              ) : null}
+              {spotlightDays != null ? (
+                <span>
+                  <span className="text-[var(--ink-faint)]">Lag </span>
+                  {spotlightDays}d
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
+              <Link href="/ahead-of-curve" className="text-[var(--signal)] hover:underline">
+                Ahead of Curve →
+              </Link>
+              <span className="mx-2 text-[var(--rule)]">·</span>
+              Early discovery & star trajectory
+            </p>
+          </div>
+        ) : (
+          <div className="border border-[var(--rule-strong)] px-4 py-3 font-sans text-sm text-[var(--ink-muted)]">
+            Spotlight unlocks once creation dates and stars-at-discovery are enriched.
+          </div>
+        )}
       </section>
     </div>
   );

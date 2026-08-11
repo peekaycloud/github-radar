@@ -195,7 +195,13 @@ export type CategoryMomentum = {
   delta: number;
 };
 
-export async function getCategoryMomentum(limit = 6): Promise<CategoryMomentum[]> {
+export type MomentumWindow = 7 | 30 | 90;
+
+export async function getCategoryMomentum(
+  limit = 6,
+  windowDays: MomentumWindow = 30
+): Promise<CategoryMomentum[]> {
+  const days = windowDays;
   return sql<CategoryMomentum[]>`
     WITH recent AS (
       SELECT c.slug, c.name, COUNT(DISTINCT m.repository_id)::int AS n
@@ -203,7 +209,7 @@ export async function getCategoryMomentum(limit = 6): Promise<CategoryMomentum[]
       JOIN categories c ON c.id = rc.category_id
       JOIN telegram_repo_mentions m ON m.repository_id = rc.repository_id
       JOIN telegram_posts p ON p.id = m.telegram_post_id
-      WHERE COALESCE(m.discovered_at, p.posted_at) >= NOW() - INTERVAL '30 days'
+      WHERE COALESCE(m.discovered_at, p.posted_at) >= NOW() - (${days} || ' days')::interval
         AND c.slug NOT IN ('other', 'open-source')
       GROUP BY c.slug, c.name
     ),
@@ -213,8 +219,8 @@ export async function getCategoryMomentum(limit = 6): Promise<CategoryMomentum[]
       JOIN categories c ON c.id = rc.category_id
       JOIN telegram_repo_mentions m ON m.repository_id = rc.repository_id
       JOIN telegram_posts p ON p.id = m.telegram_post_id
-      WHERE COALESCE(m.discovered_at, p.posted_at) >= NOW() - INTERVAL '60 days'
-        AND COALESCE(m.discovered_at, p.posted_at) < NOW() - INTERVAL '30 days'
+      WHERE COALESCE(m.discovered_at, p.posted_at) >= NOW() - ((${days} * 2) || ' days')::interval
+        AND COALESCE(m.discovered_at, p.posted_at) < NOW() - (${days} || ' days')::interval
         AND c.slug NOT IN ('other', 'open-source')
       GROUP BY c.slug
     )
@@ -229,6 +235,45 @@ export async function getCategoryMomentum(limit = 6): Promise<CategoryMomentum[]
     ORDER BY delta DESC, r.n DESC
     LIMIT ${limit}
   `;
+}
+
+export type DiscoverySpotlight = DiscoveryRow & {
+  growth_multiple: number | null;
+};
+
+export async function getDiscoverySpotlight(): Promise<DiscoverySpotlight | null> {
+  const rows = await sql<DiscoverySpotlight[]>`
+    SELECT
+      d.*,
+      sad.stars_at_discovery,
+      CASE
+        WHEN sad.stars_at_discovery IS NOT NULL AND sad.stars_at_discovery > 0
+        THEN COALESCE(d.stars, 0)::float / sad.stars_at_discovery::float
+        ELSE NULL
+      END AS growth_multiple
+    FROM v_repository_discovery d
+    JOIN v_stars_at_discovery sad ON sad.repository_id = d.repository_id
+    WHERE d.first_discovered_at IS NOT NULL
+      AND d.days_to_discovery IS NOT NULL
+      AND d.days_to_discovery >= 0
+      AND sad.stars_at_discovery IS NOT NULL
+      AND COALESCE(d.stars, 0) > sad.stars_at_discovery
+    ORDER BY
+      (
+        LN(1 + GREATEST(COALESCE(d.stars, 0) - sad.stars_at_discovery, 0))
+        * CASE
+            WHEN d.days_to_discovery <= 90 THEN 1.4
+            WHEN d.days_to_discovery <= 180 THEN 1.15
+            ELSE 1.0
+          END
+        * CASE
+            WHEN d.first_discovered_at >= NOW() - INTERVAL '30 days' THEN 1.25
+            ELSE 1.0
+          END
+      ) DESC
+    LIMIT 1
+  `;
+  return rows[0] ?? null;
 }
 
 export async function getTrending(

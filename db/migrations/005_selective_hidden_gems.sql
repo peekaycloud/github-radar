@@ -72,8 +72,4 @@ WHERE COALESCE(d.stars, 0) < 2000
   AND (
     COALESCE(g.stars_pct_growth_7d, 0) >= 20
     OR COALESCE(s.stars_pct_observed, 0) >= 3
-    OR (
-      d.first_discovered_at > NOW() - INTERVAL '14 days'
-      AND COALESCE(d.stars, 0) BETWEEN 50 AND 2000
-    )
   );

@@ -31,23 +31,43 @@ export function SectionRule({
   title,
   kicker,
   href,
+  compact,
 }: {
   title: string;
   kicker?: string;
   href?: string;
+  compact?: boolean;
 }) {
   return (
-    <div className="mb-7 flex items-end justify-between gap-4">
+    <div
+      className={
+        compact
+          ? "mb-3 flex items-end justify-between gap-4"
+          : "mb-7 flex items-end justify-between gap-4"
+      }
+    >
       <div className="min-w-0">
         {kicker ? (
           <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--signal)]">
             {kicker}
           </p>
         ) : null}
-        <h2 className="font-serif text-3xl font-semibold tracking-tight text-[var(--ink)] sm:text-4xl">
+        <h2
+          className={
+            compact
+              ? "font-serif text-xl font-semibold tracking-tight text-[var(--ink)] sm:text-2xl"
+              : "font-serif text-3xl font-semibold tracking-tight text-[var(--ink)] sm:text-4xl"
+          }
+        >
           {title}
         </h2>
-        <div className="animate-rule mt-3 h-[2px] w-16 bg-[var(--signal)]" />
+        <div
+          className={
+            compact
+              ? "animate-rule mt-2 h-[2px] w-12 bg-[var(--signal)]"
+              : "animate-rule mt-3 h-[2px] w-16 bg-[var(--signal)]"
+          }
+        />
       </div>
       {href ? (
         <Link
