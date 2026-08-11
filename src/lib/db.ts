@@ -9,13 +9,13 @@ function createSql() {
   if (!url) {
     throw new Error("DATABASE_URL is not set");
   }
-  // Supabase transaction pooler (6543) requires prepare:false.
-  // Keep the pool tiny for Vercel serverless.
+  // Supabase pooler: disable prepared statements (required for transaction mode).
+  // Small pool for Vercel serverless; prefer session pooler :5432 when possible.
   return postgres(url, {
     ssl: "require",
-    max: 1,
-    idle_timeout: 20,
-    connect_timeout: 10,
+    max: 3,
+    idle_timeout: 10,
+    connect_timeout: 8,
     prepare: false,
   });
 }

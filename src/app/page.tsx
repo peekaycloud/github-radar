@@ -17,6 +17,7 @@ import {
 } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 function parseMomentumWindow(raw?: string): MomentumWindow {
   if (raw === "7d") return 7;

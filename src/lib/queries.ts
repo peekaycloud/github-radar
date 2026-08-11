@@ -36,50 +36,52 @@ export async function getCommunityStats(): Promise<CommunityStats> {
 }
 
 export async function getTodaysRadar(limit = 12): Promise<DiscoveryRow[]> {
-  // Two-step: cheap latest-id pick, then enrich only those rows.
-  // Joining heavy views before LIMIT times out on Supabase.
-  const latest = await sql<{ repository_id: string }[]>`
-    SELECT d.repository_id
-    FROM v_repository_discovery d
-    WHERE d.first_discovered_at IS NOT NULL
-    ORDER BY d.first_discovered_at DESC NULLS LAST
-    LIMIT ${limit}
-  `;
-  if (latest.length === 0) return [];
-
-  const ids = latest.map((r) => r.repository_id);
+  // Avoid joining heavy growth views before LIMIT — that times out on Supabase.
   const rows = await sql<DiscoveryRow[]>`
     SELECT
       d.*,
-      g.stars_gained_7d,
-      g.stars_gained_30d,
-      g.stars_pct_growth_7d,
       CASE
-        WHEN snap_span.min_stars IS NOT NULL AND snap_span.min_stars > 0
-          AND snap_span.max_stars > snap_span.min_stars
-        THEN ((snap_span.max_stars - snap_span.min_stars)::float / snap_span.min_stars::float) * 100.0
+        WHEN snap.min_stars IS NOT NULL AND snap.min_stars > 0
+          AND snap.max_stars > snap.min_stars
+        THEN ((snap.max_stars - snap.min_stars)::float / snap.min_stars::float) * 100.0
         ELSE NULL
-      END AS stars_pct_growth_observed,
-      sad.stars_at_discovery
-    FROM v_repository_discovery d
-    LEFT JOIN v_repository_growth g ON g.repository_id = d.repository_id
-    LEFT JOIN v_stars_at_discovery sad ON sad.repository_id = d.repository_id
+      END AS stars_pct_growth_observed
+    FROM (
+      SELECT *
+      FROM v_repository_discovery
+      WHERE first_discovered_at IS NOT NULL
+      ORDER BY first_discovered_at DESC NULLS LAST
+      LIMIT ${limit}
+    ) d
     LEFT JOIN LATERAL (
       SELECT MIN(s.stars) AS min_stars, MAX(s.stars) AS max_stars
       FROM github_repo_snapshots s
       WHERE s.repository_id = d.repository_id
-    ) snap_span ON TRUE
-    WHERE d.repository_id = ANY(${ids}::uuid[])
-    ORDER BY d.first_discovered_at DESC NULLS LAST
+    ) snap ON TRUE
   `;
+  if (rows.length === 0) return [];
 
-  const withCats = await Promise.all(
-    rows.map(async (row) => ({
-      ...row,
-      categories: await getRepoCategories(row.repository_id),
-    }))
-  );
-  return withCats;
+  const ids = rows.map((r) => r.repository_id);
+  const catRows = await sql<
+    { repository_id: string; slug: string; name: string }[]
+  >`
+    SELECT rc.repository_id, c.slug, c.name
+    FROM repository_categories rc
+    JOIN categories c ON c.id = rc.category_id
+    WHERE rc.repository_id = ANY(${ids})
+    ORDER BY c.name
+  `;
+  const catsByRepo = new Map<string, { slug: string; name: string }[]>();
+  for (const c of catRows) {
+    const list = catsByRepo.get(c.repository_id) ?? [];
+    list.push({ slug: c.slug, name: c.name });
+    catsByRepo.set(c.repository_id, list);
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    categories: catsByRepo.get(row.repository_id) ?? [],
+  }));
 }
 
 export type IntelligenceStats = {
@@ -108,12 +110,6 @@ export async function getIntelligenceStats(): Promise<IntelligenceStats> {
       ) AS discoveries_this_week,
       (
         SELECT COUNT(*)::int FROM (
-          SELECT g.repository_id
-          FROM v_repository_growth g
-          WHERE COALESCE(g.stars_gained_7d, 0) >= 50
-             OR COALESCE(g.stars_pct_growth_7d, 0) >= 15
-             OR COALESCE(g.stars_gained_30d, 0) >= 100
-          UNION
           SELECT s.repository_id
           FROM github_repo_snapshots s
           GROUP BY s.repository_id
@@ -126,16 +122,7 @@ export async function getIntelligenceStats(): Promise<IntelligenceStats> {
         FROM v_repository_discovery
         WHERE days_to_discovery IS NOT NULL AND days_to_discovery >= 0
       )::float AS median_discovery_age_days,
-      (
-        -- Repos whose earliest known stars were <1K and current stars >=1K,
-        -- with a recent discovery or recent snapshot activity.
-        SELECT COUNT(*)::int
-        FROM v_stars_at_discovery sad
-        JOIN v_repository_discovery d ON d.repository_id = sad.repository_id
-        WHERE sad.stars_at_discovery < 1000
-          AND COALESCE(d.stars, 0) >= 1000
-          AND d.first_discovered_at >= NOW() - INTERVAL '30 days'
-      ) AS crossed_1k_this_week
+      0 AS crossed_1k_this_week
   `;
   return (
     rows[0] ?? {
@@ -159,8 +146,6 @@ export async function getFastestMoving(limit = 5): Promise<FastMover[]> {
     WITH snap AS (
       SELECT
         repository_id,
-        MIN(stars) AS min_stars,
-        MAX(stars) AS max_stars,
         CASE
           WHEN MIN(stars) > 0
           THEN ((MAX(stars) - MIN(stars))::float / MIN(stars)::float) * 100.0
@@ -172,14 +157,11 @@ export async function getFastestMoving(limit = 5): Promise<FastMover[]> {
     )
     SELECT
       d.*,
-      COALESCE(g.stars_pct_growth_7d, s.pct) AS pct_growth_observed,
-      g.stars_gained_7d,
-      g.stars_pct_growth_7d
+      s.pct AS pct_growth_observed
     FROM snap s
     JOIN v_repository_discovery d ON d.repository_id = s.repository_id
-    LEFT JOIN v_repository_growth g ON g.repository_id = d.repository_id
-    WHERE COALESCE(g.stars_pct_growth_7d, s.pct) >= 1
-    ORDER BY COALESCE(g.stars_pct_growth_7d, s.pct) DESC NULLS LAST
+    WHERE s.pct >= 1
+    ORDER BY s.pct DESC
     LIMIT ${limit}
   `;
 }
