@@ -31,14 +31,15 @@ export function buildWhyItMatters(repo: DiscoveryRow): RadarSignal[] {
     });
   }
 
-  if (repo.mention_count != null && repo.mention_count >= 1) {
+  const mentions = Number(repo.mention_count ?? 0);
+  if (mentions >= 1) {
     signals.push({
       label: "Community",
       value:
-        repo.mention_count === 1
+        mentions === 1
           ? "1 Telegram mention"
-          : `${repo.mention_count} Telegram mentions`,
-      tone: repo.mention_count >= 3 ? "signal" : "ink",
+          : `${mentions} Telegram mentions`,
+      tone: mentions >= 3 ? "signal" : "ink",
     });
   }
 
