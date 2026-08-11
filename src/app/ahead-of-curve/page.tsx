@@ -18,9 +18,12 @@ export default async function AheadPage({
     <div className="space-y-8">
       <SectionRule title="Ahead of the Curve" kicker="Signature ranking" />
       <p className="max-w-2xl font-sans text-sm leading-relaxed text-[var(--ink-muted)]">
-        Ranked by how early the channel discovered a project after GitHub
-        creation — and how large it became afterward. Creation dates come from
-        public repository pages (no GitHub API token required).
+        Two signals, one ranking.{" "}
+        <span className="text-[var(--ink)]">Early discovery</span> is days from
+        GitHub creation to first Telegram mention.{" "}
+        <span className="text-[var(--ink)]">Ahead of curve</span> is the star
+        trajectory from discovery to now (e.g. 183 → 12.4K). Creation dates come
+        from public repository pages.
       </p>
       {rows.length === 0 ? (
         <EmptyState message="No creation dates yet. Enrichment is catching up — check back after the next enrich run." />

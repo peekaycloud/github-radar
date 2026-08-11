@@ -78,11 +78,11 @@ export async function getTodaysRadar(limit = 12): Promise<DiscoveryRow[]> {
 export type IntelligenceStats = {
   total_repositories: number;
   discoveries_this_month: number;
+  discoveries_this_week: number;
   fast_growers: number;
   hidden_gems: number;
-  median_discovery_lead_days: number | null;
-  ahead_before_1k: number;
-  total_mentions: number;
+  median_discovery_age_days: number | null;
+  crossed_1k_this_week: number;
 };
 
 export async function getIntelligenceStats(): Promise<IntelligenceStats> {
@@ -95,8 +95,11 @@ export async function getIntelligenceStats(): Promise<IntelligenceStats> {
         WHERE first_discovered_at >= NOW() - INTERVAL '30 days'
       ) AS discoveries_this_month,
       (
-        -- Prefer 7d growth once snapshot history exists; fall back to
-        -- observed star delta across known snapshots (early pipeline).
+        SELECT COUNT(*)::int
+        FROM v_repository_discovery
+        WHERE first_discovered_at >= NOW() - INTERVAL '7 days'
+      ) AS discoveries_this_week,
+      (
         SELECT COUNT(*)::int FROM (
           SELECT g.repository_id
           FROM v_repository_growth g
@@ -115,26 +118,62 @@ export async function getIntelligenceStats(): Promise<IntelligenceStats> {
         SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY days_to_discovery)
         FROM v_repository_discovery
         WHERE days_to_discovery IS NOT NULL AND days_to_discovery >= 0
-      )::float AS median_discovery_lead_days,
+      )::float AS median_discovery_age_days,
       (
+        -- Repos whose earliest known stars were <1K and current stars >=1K,
+        -- with a recent discovery or recent snapshot activity.
         SELECT COUNT(*)::int
-        FROM v_stars_at_discovery
-        WHERE stars_at_discovery IS NOT NULL
-          AND stars_at_discovery < 1000
-      ) AS ahead_before_1k,
-      (SELECT COUNT(*)::int FROM telegram_repo_mentions) AS total_mentions
+        FROM v_stars_at_discovery sad
+        JOIN v_repository_discovery d ON d.repository_id = sad.repository_id
+        WHERE sad.stars_at_discovery < 1000
+          AND COALESCE(d.stars, 0) >= 1000
+          AND d.first_discovered_at >= NOW() - INTERVAL '30 days'
+      ) AS crossed_1k_this_week
   `;
   return (
     rows[0] ?? {
       total_repositories: 0,
       discoveries_this_month: 0,
+      discoveries_this_week: 0,
       fast_growers: 0,
       hidden_gems: 0,
-      median_discovery_lead_days: null,
-      ahead_before_1k: 0,
-      total_mentions: 0,
+      median_discovery_age_days: null,
+      crossed_1k_this_week: 0,
     }
   );
+}
+
+export type FastMover = DiscoveryRow & {
+  pct_growth_observed: number;
+};
+
+export async function getFastestMoving(limit = 5): Promise<FastMover[]> {
+  return sql<FastMover[]>`
+    WITH snap AS (
+      SELECT
+        repository_id,
+        MIN(stars) AS min_stars,
+        MAX(stars) AS max_stars,
+        CASE
+          WHEN MIN(stars) > 0
+          THEN ((MAX(stars) - MIN(stars))::float / MIN(stars)::float) * 100.0
+          ELSE 0::float
+        END AS pct
+      FROM github_repo_snapshots
+      GROUP BY repository_id
+      HAVING COUNT(*) >= 2 AND MAX(stars) > MIN(stars)
+    )
+    SELECT
+      d.*,
+      COALESCE(g.stars_pct_growth_7d, s.pct) AS pct_growth_observed,
+      g.stars_gained_7d,
+      g.stars_pct_growth_7d
+    FROM snap s
+    JOIN v_repository_discovery d ON d.repository_id = s.repository_id
+    LEFT JOIN v_repository_growth g ON g.repository_id = d.repository_id
+    ORDER BY COALESCE(g.stars_pct_growth_7d, s.pct) DESC NULLS LAST
+    LIMIT ${limit}
+  `;
 }
 
 export type CategoryMomentum = {
@@ -427,4 +466,13 @@ export function formatDate(value: string | null | undefined): string {
     day: "numeric",
     year: "numeric",
   });
+}
+
+export function formatDateShort(value: string | null | undefined): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d
+    .toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    .toUpperCase();
 }

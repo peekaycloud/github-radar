@@ -18,9 +18,9 @@ export default async function HiddenGemsPage({
     <div className="space-y-8">
       <SectionRule title="Hidden Gems" kicker="Small today. Growing fast." />
       <p className="max-w-2xl font-sans text-sm leading-relaxed text-[var(--ink-muted)]">
-        Gems require multiple signals: modest star count, recent growth,
-        recent channel discovery, and signs of activity — not simply “low
-        stars.”
+        Selective by design: under 2K stars, non-fork, active or discovered in
+        the last 30 days, plus a growth or freshness signal. Roughly the top
+        fraction of the archive — not every small repo.
       </p>
       {rows.length === 0 ? (
         <EmptyState message="Gem rankings unlock after enrichment produces growth snapshots." />

@@ -1,7 +1,12 @@
 import Link from "next/link";
 import type { DiscoveryRow } from "@/lib/db";
-import { formatDate, formatNumber } from "@/lib/queries";
-import { buildWhyItMatters, signalLevel } from "@/lib/signals";
+import { formatDateShort, formatNumber } from "@/lib/queries";
+
+function growthPct(repo: DiscoveryRow): number | null {
+  const g = repo.stars_pct_growth_30d ?? repo.stars_pct_growth_7d ?? null;
+  if (g == null || !Number.isFinite(g) || g === 0) return null;
+  return g;
+}
 
 export function EditorialRadarCard({
   repo,
@@ -12,110 +17,89 @@ export function EditorialRadarCard({
 }) {
   const name = repo.full_name || `${repo.owner}/${repo.repo_name}`;
   const href = `/repo/${repo.owner}/${repo.repo_name}`;
-  const signals = buildWhyItMatters(repo);
-  const level = signalLevel(repo);
-  const growth =
-    repo.stars_pct_growth_30d ?? repo.stars_pct_growth_7d ?? null;
+  const growth = growthPct(repo);
+  const cats = (repo.categories ?? []).slice(0, 3);
+  const days =
+    repo.days_to_discovery != null && repo.days_to_discovery >= 0
+      ? Math.round(repo.days_to_discovery)
+      : null;
 
   return (
-    <article className="border-b border-[var(--rule)] py-7 first:pt-3 last:border-b-0">
-      <div className="grid gap-5 lg:grid-cols-[2.75rem_1fr_11rem]">
-        <p className="font-mono text-sm font-medium tabular-nums text-[var(--signal)]">
+    <article className="border-b border-[var(--rule)] py-3.5 first:pt-1 last:border-b-0">
+      <div className="grid gap-2 sm:grid-cols-[2rem_1fr_auto] sm:items-start sm:gap-4">
+        <p className="font-mono text-xs font-medium tabular-nums text-[var(--signal)]">
           {String(index).padStart(2, "0")}
         </p>
 
         <div className="min-w-0">
-          <Link
-            href={href}
-            className="font-serif text-xl font-semibold tracking-tight text-[var(--ink)] decoration-[var(--signal)] underline-offset-4 hover:underline sm:text-2xl"
-          >
-            {name}
-          </Link>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <Link
+              href={href}
+              className="font-serif text-base font-semibold tracking-tight text-[var(--ink)] hover:underline decoration-[var(--signal)] underline-offset-2 sm:text-lg"
+            >
+              {name}
+            </Link>
+            <span className="font-mono text-sm tabular-nums text-[var(--ink)]">
+              ★ {formatNumber(repo.stars)}
+            </span>
+          </div>
+
           {repo.description ? (
-            <p className="mt-2 max-w-2xl font-serif text-base leading-snug text-[var(--ink-muted)] sm:text-lg">
+            <p className="mt-1 line-clamp-1 font-sans text-sm text-[var(--ink-muted)]">
               {repo.description}
             </p>
           ) : null}
 
-          <div className="mt-4 flex flex-wrap items-baseline gap-x-5 gap-y-1.5 font-mono text-xs tabular-nums text-[var(--ink)]">
-            <span className="text-sm font-medium">★ {formatNumber(repo.stars)}</span>
-            {repo.stars_gained_7d != null && repo.stars_gained_7d !== 0 ? (
-              <span className="text-[var(--signal)]">
-                ◉ {repo.stars_gained_7d > 0 ? "+" : ""}
-                {formatNumber(repo.stars_gained_7d)}
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--ink-faint)]">
+            {cats.length > 0 ? (
+              <span className="text-[var(--ink-muted)]">
+                {cats.map((c) => c.name).join(" · ")}
               </span>
+            ) : repo.language ? (
+              <span className="text-[var(--ink-muted)]">{repo.language}</span>
             ) : null}
-            {repo.language ? <span className="text-[var(--ink-faint)]">{repo.language}</span> : null}
-            {growth != null && growth !== 0 ? (
+            <span>
+              Discovered {formatDateShort(repo.first_discovered_at)}
+            </span>
+            {growth != null ? (
               <span className="text-[var(--signal)]">
-                {growth > 0 ? "↑" : "↓"} {Math.abs(growth).toFixed(0)}% /{" "}
-                {repo.stars_pct_growth_30d != null ? "30 days" : "7 days"}
+                {growth > 0 ? "+" : ""}
+                {growth.toFixed(0)}% / {repo.stars_pct_growth_30d != null ? "30d" : "7d"}
               </span>
             ) : null}
           </div>
-
-          <div className="mt-4 grid gap-1 border-l-2 border-[var(--signal)] pl-3">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--signal)]">
-              Why it’s on the radar
-            </p>
-            <ul className="space-y-0.5 font-sans text-sm text-[var(--ink-muted)]">
-              {signals.map((s) => (
-                <li key={s.label}>
-                  <span className="text-[var(--ink-faint)]">{s.label}: </span>
-                  <span
-                    className={
-                      s.tone === "signal"
-                        ? "text-[var(--signal)]"
-                        : s.tone === "ink"
-                          ? "text-[var(--ink)]"
-                          : undefined
-                    }
-                  >
-                    {s.value}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {repo.categories && repo.categories.length > 0 ? (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {repo.categories.slice(0, 4).map((c) => (
-                <span
-                  key={c.slug}
-                  className="border border-[var(--rule-strong)] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--ink-muted)]"
-                >
-                  {c.name}
-                </span>
-              ))}
-            </div>
-          ) : null}
         </div>
 
-        <aside className="flex flex-row gap-6 border-t border-[var(--rule)] pt-3 lg:flex-col lg:gap-3 lg:border-t-0 lg:border-l lg:pl-4 lg:pt-0">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--signal)]">
-              Discovered
-            </p>
-            <p className="mt-1 font-serif text-lg font-semibold tracking-tight text-[var(--ink)]">
-              {formatDate(repo.first_discovered_at).toUpperCase()}
-            </p>
-          </div>
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
-              Signal
-            </p>
-            <p
-              className={
-                level === "High"
-                  ? "mt-1 font-mono text-xs font-medium uppercase tracking-[0.14em] text-[var(--signal)]"
-                  : "mt-1 font-mono text-xs font-medium uppercase tracking-[0.14em] text-[var(--ink)]"
-              }
-            >
-              {level === "High" ? "● " : level === "Rising" ? "◐ " : "○ "}
-              {level}
-            </p>
-          </div>
+        <aside className="hidden w-[6.5rem] shrink-0 text-right sm:block">
+          {growth != null ? (
+            <>
+              <p className="font-serif text-lg font-semibold tabular-nums leading-none text-[var(--signal)]">
+                {growth > 0 ? "+" : ""}
+                {growth.toFixed(0)}%
+              </p>
+              <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
+                {repo.stars_pct_growth_30d != null ? "30d growth" : "7d growth"}
+              </p>
+            </>
+          ) : days != null ? (
+            <>
+              <p className="font-serif text-lg font-semibold tabular-nums leading-none text-[var(--ink)]">
+                {days}d
+              </p>
+              <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
+                creation → discovery
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="font-serif text-base font-semibold leading-none text-[var(--ink)]">
+                {formatDateShort(repo.first_discovered_at)}
+              </p>
+              <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
+                Discovered
+              </p>
+            </>
+          )}
         </aside>
       </div>
     </article>
@@ -128,24 +112,55 @@ export function MomentumBars({
   items: { name: string; recent: number; delta: number }[];
 }) {
   if (!items.length) return null;
-  const max = Math.max(...items.map((i) => i.recent), 1);
+  const max = Math.max(...items.map((i) => Math.abs(i.delta) || i.recent), 1);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       {items.map((item) => (
-        <div key={item.name} className="grid grid-cols-[7.5rem_1fr_4rem] items-center gap-3">
+        <div key={item.name} className="grid grid-cols-[7rem_1fr_5.5rem] items-center gap-2">
           <span className="truncate font-sans text-sm text-[var(--ink)]">{item.name}</span>
-          <div className="h-[6px] bg-[var(--rule)]/50">
+          <div className="h-[5px] bg-[var(--rule)]/40">
             <div
-              className="h-[6px] bg-[var(--ink)]"
-              style={{ width: `${Math.max(4, (item.recent / max) * 100)}%` }}
+              className="h-[5px] bg-[var(--ink)]"
+              style={{
+                width: `${Math.max(4, (Math.max(item.delta, 0) / max) * 100)}%`,
+              }}
             />
           </div>
           <span className="text-right font-mono text-[11px] tabular-nums text-[var(--signal)]">
-            {item.delta > 0 ? `+${item.delta}` : item.delta}
+            {item.delta > 0 ? `+${item.delta}` : item.delta} repos
           </span>
         </div>
       ))}
     </div>
+  );
+}
+
+export function CompactRepoRow({
+  repo,
+  metric,
+  metricLabel,
+}: {
+  repo: DiscoveryRow;
+  metric: string;
+  metricLabel?: string;
+}) {
+  const name = repo.full_name || `${repo.owner}/${repo.repo_name}`;
+  const href = `/repo/${repo.owner}/${repo.repo_name}`;
+  return (
+    <Link
+      href={href}
+      className="flex items-baseline justify-between gap-3 border-b border-[var(--rule)] py-2 last:border-b-0 hover:bg-[var(--paper-elevated)]"
+    >
+      <span className="min-w-0 truncate font-sans text-sm text-[var(--ink)]">{name}</span>
+      <span className="shrink-0 text-right">
+        <span className="font-mono text-sm tabular-nums text-[var(--signal)]">{metric}</span>
+        {metricLabel ? (
+          <span className="ml-1 font-mono text-[9px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
+            {metricLabel}
+          </span>
+        ) : null}
+      </span>
+    </Link>
   );
 }
