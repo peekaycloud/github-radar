@@ -36,44 +36,41 @@ export async function getCommunityStats(): Promise<CommunityStats> {
 }
 
 export async function getTodaysRadar(limit = 12): Promise<DiscoveryRow[]> {
+  // Two-step: cheap latest-id pick, then enrich only those rows.
+  // Joining heavy views before LIMIT times out on Supabase.
+  const latest = await sql<{ repository_id: string }[]>`
+    SELECT d.repository_id
+    FROM v_repository_discovery d
+    WHERE d.first_discovered_at IS NOT NULL
+    ORDER BY d.first_discovered_at DESC NULLS LAST
+    LIMIT ${limit}
+  `;
+  if (latest.length === 0) return [];
+
+  const ids = latest.map((r) => r.repository_id);
   const rows = await sql<DiscoveryRow[]>`
     SELECT
       d.*,
-      ds.discovery_score,
       g.stars_gained_7d,
       g.stars_gained_30d,
       g.stars_pct_growth_7d,
       CASE
-        WHEN snap30.stars IS NOT NULL AND snap30.stars > 0
-        THEN ((COALESCE(d.stars, 0) - snap30.stars)::float / snap30.stars::float) * 100.0
-        ELSE NULL
-      END AS stars_pct_growth_30d,
-      CASE
         WHEN snap_span.min_stars IS NOT NULL AND snap_span.min_stars > 0
+          AND snap_span.max_stars > snap_span.min_stars
         THEN ((snap_span.max_stars - snap_span.min_stars)::float / snap_span.min_stars::float) * 100.0
         ELSE NULL
       END AS stars_pct_growth_observed,
       sad.stars_at_discovery
     FROM v_repository_discovery d
-    LEFT JOIN v_discovery_score ds ON ds.repository_id = d.repository_id
     LEFT JOIN v_repository_growth g ON g.repository_id = d.repository_id
     LEFT JOIN v_stars_at_discovery sad ON sad.repository_id = d.repository_id
-    LEFT JOIN LATERAL (
-      SELECT s.stars
-      FROM github_repo_snapshots s
-      WHERE s.repository_id = d.repository_id
-        AND s.captured_at <= NOW() - INTERVAL '30 days'
-      ORDER BY s.captured_at DESC
-      LIMIT 1
-    ) snap30 ON TRUE
     LEFT JOIN LATERAL (
       SELECT MIN(s.stars) AS min_stars, MAX(s.stars) AS max_stars
       FROM github_repo_snapshots s
       WHERE s.repository_id = d.repository_id
     ) snap_span ON TRUE
-    WHERE d.first_discovered_at IS NOT NULL
+    WHERE d.repository_id = ANY(${ids}::uuid[])
     ORDER BY d.first_discovered_at DESC NULLS LAST
-    LIMIT ${limit}
   `;
 
   const withCats = await Promise.all(
