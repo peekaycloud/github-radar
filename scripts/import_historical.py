@@ -41,8 +41,10 @@ def parse_dt(value: str | None) -> datetime | None:
 def update_ingestion_state(cur, *, channel: str, max_message_id: int, max_posted_at: datetime | None) -> None:
     cur.execute(
         """
-        INSERT INTO ingestion_state (id, channel, last_telegram_message_id, last_posted_at, last_successful_run_at)
-        VALUES (1, %s, %s, %s, NOW())
+        INSERT INTO ingestion_state (
+          channel, last_telegram_message_id, last_posted_at, last_successful_run_at
+        )
+        VALUES (%s, %s, %s, NOW())
         ON CONFLICT (channel) DO UPDATE SET
           last_telegram_message_id = GREATEST(
             COALESCE(ingestion_state.last_telegram_message_id, 0),
@@ -159,10 +161,9 @@ def import_csv(path: Path, *, channel: str, dry_run: bool, limit: int | None) ->
                         INSERT INTO telegram_posts (
                           telegram_message_id, posted_at, text, source_channel, scraped_at
                         ) VALUES (%s, %s, %s, %s, NOW())
-                        ON CONFLICT (telegram_message_id) DO UPDATE SET
+                        ON CONFLICT (source_channel, telegram_message_id) DO UPDATE SET
                           text = COALESCE(EXCLUDED.text, telegram_posts.text),
-                          posted_at = COALESCE(telegram_posts.posted_at, EXCLUDED.posted_at),
-                          source_channel = COALESCE(telegram_posts.source_channel, EXCLUDED.source_channel)
+                          posted_at = COALESCE(telegram_posts.posted_at, EXCLUDED.posted_at)
                         """,
                         part,
                     )
@@ -293,10 +294,9 @@ def upsert_post(cur, *, message_id: int, posted_at: datetime, text: str | None, 
         INSERT INTO telegram_posts (
           telegram_message_id, posted_at, text, source_channel, scraped_at
         ) VALUES (%s, %s, %s, %s, NOW())
-        ON CONFLICT (telegram_message_id) DO UPDATE SET
+        ON CONFLICT (source_channel, telegram_message_id) DO UPDATE SET
           text = COALESCE(EXCLUDED.text, telegram_posts.text),
-          posted_at = COALESCE(telegram_posts.posted_at, EXCLUDED.posted_at),
-          source_channel = COALESCE(telegram_posts.source_channel, EXCLUDED.source_channel)
+          posted_at = COALESCE(telegram_posts.posted_at, EXCLUDED.posted_at)
         RETURNING id
         """,
         (message_id, posted_at, text, channel),

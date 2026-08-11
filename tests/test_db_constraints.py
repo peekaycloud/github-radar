@@ -20,7 +20,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_unique_message_id_constraint():
+def test_unique_channel_message_id_constraint():
     from dotenv import load_dotenv
 
     load_dotenv(ROOT / ".env.local")
@@ -28,9 +28,9 @@ def test_unique_message_id_constraint():
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT telegram_message_id, COUNT(*) AS c
+                SELECT source_channel, telegram_message_id, COUNT(*) AS c
                 FROM telegram_posts
-                GROUP BY telegram_message_id
+                GROUP BY source_channel, telegram_message_id
                 HAVING COUNT(*) > 1
                 """
             )

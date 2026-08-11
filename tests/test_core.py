@@ -92,6 +92,24 @@ class TestClassify:
         assert "other" in cats or "open-source" in cats
 
 
+class TestChannelsConfig:
+    def test_default_channels(self):
+        from scripts.channels import DEFAULT_CHANNELS, parse_channels
+
+        assert "githubtrending" in DEFAULT_CHANNELS
+        assert "github_repos" in DEFAULT_CHANNELS
+        assert "github_repositories_bds" in DEFAULT_CHANNELS
+        assert parse_channels("github_repos, github_repositories_bds") == [
+            "github_repos",
+            "github_repositories_bds",
+        ]
+
+    def test_strips_at_and_dedupes(self):
+        from scripts.channels import parse_channels
+
+        assert parse_channels("@a, a, @b") == ["a", "b"]
+
+
 class TestPostedAtWatermark:
     def test_newer_posted_at(self):
         from datetime import datetime, timezone

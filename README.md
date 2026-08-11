@@ -67,14 +67,23 @@ python scripts/classify_categories.py
 
 ### 5. Daily delta scrape (local)
 
-Uses `ingestion_state.last_posted_at` as the Telegram watermark, upserts into
-Supabase, then enriches new/stale repos via public GitHub pages:
+Scrapes multiple channels by default (`githubtrending`, `github_repos`,
+`github_repositories_bds`). Repositories are deduplicated by `github_url`.
+
+Uses `ingestion_state.last_posted_at` per channel as the watermark:
 
 ```bash
 python telegram_scraper.py --dry-run
+python telegram_scraper.py --backfill-missing   # first-time full history for new channels
 python telegram_scraper.py
-python telegram_scraper.py --skip-enrich          # ingest only
-python telegram_scraper.py --enrich-limit 80
+python telegram_scraper.py --channels github_repos,github_repositories_bds
+python telegram_scraper.py --skip-enrich
+```
+
+Unique repos query:
+
+```sql
+SELECT COUNT(*) FROM repositories;
 ```
 
 Or call the lower-level scripts directly:

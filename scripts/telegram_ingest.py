@@ -378,11 +378,15 @@ def main() -> None:
     )
     parser.add_argument(
         "--channel",
-        default=os.getenv("TELEGRAM_CHANNEL") or os.getenv("SOURCE_CHANNEL", "githubtrending"),
+        default=None,
+        help="Single channel username (default: first from TELEGRAM_CHANNELS)",
     )
     args = parser.parse_args()
+    from scripts.channels import parse_channels
+
+    channel = args.channel or parse_channels()[0]
     asyncio.run(
-        ingest(dry_run=args.dry_run, batch_size=args.batch_size, channel=args.channel)
+        ingest(dry_run=args.dry_run, batch_size=args.batch_size, channel=channel)
     )
 
 
