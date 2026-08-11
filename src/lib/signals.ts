@@ -11,10 +11,10 @@ export function buildWhyItMatters(repo: DiscoveryRow): RadarSignal[] {
 
   const growth30 = repo.stars_pct_growth_30d ?? repo.stars_pct_growth_7d;
   if (growth30 != null && Number.isFinite(growth30) && growth30 !== 0) {
-    const period = repo.stars_pct_growth_30d != null ? "30 days" : "7 days";
+    const period = repo.stars_pct_growth_30d != null ? "this month" : "this week";
     signals.push({
       label: "Trajectory",
-      value: `${growth30 > 0 ? "↑" : "↓"} ${Math.abs(growth30).toFixed(0)}% / ${period}`,
+      value: `${growth30 > 0 ? "↑" : "↓"} ${Math.abs(growth30).toFixed(0)}% star growth ${period}`,
       tone: growth30 >= 15 ? "signal" : "ink",
     });
   } else if (repo.stars_gained_7d != null && repo.stars_gained_7d !== 0) {
@@ -23,6 +23,23 @@ export function buildWhyItMatters(repo: DiscoveryRow): RadarSignal[] {
       value: `${repo.stars_gained_7d > 0 ? "+" : ""}${Math.round(repo.stars_gained_7d).toLocaleString()} ★ / 7d`,
       tone: repo.stars_gained_7d >= 50 ? "signal" : "ink",
     });
+  } else if ((repo.stars_gained_30d ?? 0) > 0) {
+    signals.push({
+      label: "Trajectory",
+      value: `+${Math.round(repo.stars_gained_30d!).toLocaleString()} ★ / 30d`,
+      tone: "ink",
+    });
+  }
+
+  if (repo.mention_count != null && repo.mention_count >= 1) {
+    signals.push({
+      label: "Community",
+      value:
+        repo.mention_count === 1
+          ? "1 Telegram mention"
+          : `${repo.mention_count} Telegram mentions`,
+      tone: repo.mention_count >= 3 ? "signal" : "ink",
+    });
   }
 
   if (repo.days_to_discovery != null && repo.days_to_discovery >= 0) {
@@ -30,32 +47,38 @@ export function buildWhyItMatters(repo: DiscoveryRow): RadarSignal[] {
     signals.push({
       label: "Discovery lead",
       value:
-        days <= 14
-          ? `Discovered ${days}d after creation`
-          : days <= 90
-            ? `${days} days after creation`
+        days === 0
+          ? "Discovered same day as creation"
+          : days <= 14
+            ? `Discovered ${days} days after creation`
             : `${days} days after creation`,
       tone: days <= 30 ? "signal" : "muted",
     });
   }
 
-  if (repo.mention_count != null && repo.mention_count >= 2) {
-    signals.push({
-      label: "Community",
-      value: `${repo.mention_count} channel posts`,
-      tone: "ink",
-    });
-  }
-
   if (repo.stars_at_discovery != null && repo.stars != null && repo.stars_at_discovery > 0) {
     const multiple = repo.stars / repo.stars_at_discovery;
-    if (multiple >= 1.5) {
+    if (multiple >= 1.25) {
       signals.push({
         label: "Since discovery",
-        value: `${multiple.toFixed(1)}× growth`,
+        value: `${multiple.toFixed(1)}× star growth`,
+        tone: "signal",
+      });
+    } else if (repo.stars_at_discovery < 1000) {
+      signals.push({
+        label: "At discovery",
+        value: `Under 1K stars (${Math.round(repo.stars_at_discovery).toLocaleString()} ★)`,
         tone: "signal",
       });
     }
+  }
+
+  if (signals.length === 0 && repo.stars != null) {
+    signals.push({
+      label: "Scale",
+      value: `${Math.round(repo.stars).toLocaleString()} stars on GitHub`,
+      tone: "muted",
+    });
   }
 
   if (signals.length === 0) {

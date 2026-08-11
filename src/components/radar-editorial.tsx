@@ -18,28 +18,33 @@ export function EditorialRadarCard({
     repo.stars_pct_growth_30d ?? repo.stars_pct_growth_7d ?? null;
 
   return (
-    <article className="border-b border-[var(--rule)] py-8 first:pt-2 last:border-b-0">
-      <div className="grid gap-6 lg:grid-cols-[3rem_1fr_14rem]">
-        <p className="font-mono text-sm font-medium text-[var(--signal)]">
+    <article className="border-b border-[var(--rule)] py-7 first:pt-3 last:border-b-0">
+      <div className="grid gap-5 lg:grid-cols-[2.75rem_1fr_11rem]">
+        <p className="font-mono text-sm font-medium tabular-nums text-[var(--signal)]">
           {String(index).padStart(2, "0")}
         </p>
 
         <div className="min-w-0">
           <Link
             href={href}
-            className="font-serif text-2xl font-semibold tracking-tight text-[var(--ink)] decoration-[var(--signal)] underline-offset-4 hover:underline sm:text-3xl"
+            className="font-serif text-xl font-semibold tracking-tight text-[var(--ink)] decoration-[var(--signal)] underline-offset-4 hover:underline sm:text-2xl"
           >
             {name}
           </Link>
           {repo.description ? (
-            <p className="mt-3 max-w-2xl font-serif text-lg leading-snug text-[var(--ink-muted)]">
+            <p className="mt-2 max-w-2xl font-serif text-base leading-snug text-[var(--ink-muted)] sm:text-lg">
               {repo.description}
             </p>
           ) : null}
 
-          <div className="mt-5 flex flex-wrap items-baseline gap-x-5 gap-y-2 font-mono text-xs tabular-nums text-[var(--ink)]">
-            <span className="text-base font-medium">★ {formatNumber(repo.stars)}</span>
-            {repo.forks != null ? <span>⑂ {formatNumber(repo.forks)}</span> : null}
+          <div className="mt-4 flex flex-wrap items-baseline gap-x-5 gap-y-1.5 font-mono text-xs tabular-nums text-[var(--ink)]">
+            <span className="text-sm font-medium">★ {formatNumber(repo.stars)}</span>
+            {repo.stars_gained_7d != null && repo.stars_gained_7d !== 0 ? (
+              <span className="text-[var(--signal)]">
+                ◉ {repo.stars_gained_7d > 0 ? "+" : ""}
+                {formatNumber(repo.stars_gained_7d)}
+              </span>
+            ) : null}
             {repo.language ? <span className="text-[var(--ink-faint)]">{repo.language}</span> : null}
             {growth != null && growth !== 0 ? (
               <span className="text-[var(--signal)]">
@@ -49,11 +54,11 @@ export function EditorialRadarCard({
             ) : null}
           </div>
 
-          <div className="mt-5 grid gap-1 border-l-2 border-[var(--signal)] pl-3">
+          <div className="mt-4 grid gap-1 border-l-2 border-[var(--signal)] pl-3">
             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--signal)]">
               Why it’s on the radar
             </p>
-            <ul className="space-y-1 font-sans text-sm text-[var(--ink-muted)]">
+            <ul className="space-y-0.5 font-sans text-sm text-[var(--ink-muted)]">
               {signals.map((s) => (
                 <li key={s.label}>
                   <span className="text-[var(--ink-faint)]">{s.label}: </span>
@@ -74,11 +79,11 @@ export function EditorialRadarCard({
           </div>
 
           {repo.categories && repo.categories.length > 0 ? (
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-1.5">
               {repo.categories.slice(0, 4).map((c) => (
                 <span
                   key={c.slug}
-                  className="border border-[var(--rule-strong)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--ink-muted)]"
+                  className="border border-[var(--rule-strong)] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--ink-muted)]"
                 >
                   {c.name}
                 </span>
@@ -87,12 +92,12 @@ export function EditorialRadarCard({
           ) : null}
         </div>
 
-        <aside className="flex flex-col gap-4 border-t border-[var(--rule)] pt-4 lg:border-t-0 lg:border-l lg:pl-5 lg:pt-0">
+        <aside className="flex flex-row gap-6 border-t border-[var(--rule)] pt-3 lg:flex-col lg:gap-3 lg:border-t-0 lg:border-l lg:pl-4 lg:pt-0">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--signal)]">
               Discovered
             </p>
-            <p className="mt-1 font-serif text-xl font-semibold tracking-tight text-[var(--ink)]">
+            <p className="mt-1 font-serif text-lg font-semibold tracking-tight text-[var(--ink)]">
               {formatDate(repo.first_discovered_at).toUpperCase()}
             </p>
           </div>
@@ -103,8 +108,8 @@ export function EditorialRadarCard({
             <p
               className={
                 level === "High"
-                  ? "mt-1 font-mono text-sm font-medium uppercase tracking-[0.14em] text-[var(--signal)]"
-                  : "mt-1 font-mono text-sm font-medium uppercase tracking-[0.14em] text-[var(--ink)]"
+                  ? "mt-1 font-mono text-xs font-medium uppercase tracking-[0.14em] text-[var(--signal)]"
+                  : "mt-1 font-mono text-xs font-medium uppercase tracking-[0.14em] text-[var(--ink)]"
               }
             >
               {level === "High" ? "● " : level === "Rising" ? "◐ " : "○ "}

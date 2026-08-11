@@ -82,7 +82,7 @@ export type IntelligenceStats = {
   hidden_gems: number;
   median_discovery_lead_days: number | null;
   ahead_before_1k: number;
-  total_posts: number;
+  total_mentions: number;
 };
 
 export async function getIntelligenceStats(): Promise<IntelligenceStats> {
@@ -90,16 +90,25 @@ export async function getIntelligenceStats(): Promise<IntelligenceStats> {
     SELECT
       (SELECT COUNT(*)::int FROM repositories) AS total_repositories,
       (
-        SELECT COUNT(DISTINCT repository_id)::int
-        FROM telegram_repo_mentions m
-        JOIN telegram_posts p ON p.id = m.telegram_post_id
-        WHERE COALESCE(m.discovered_at, p.posted_at) >= NOW() - INTERVAL '30 days'
+        SELECT COUNT(*)::int
+        FROM v_repository_discovery
+        WHERE first_discovered_at >= NOW() - INTERVAL '30 days'
       ) AS discoveries_this_month,
       (
-        SELECT COUNT(*)::int
-        FROM v_repository_growth
-        WHERE COALESCE(stars_gained_7d, 0) >= 50
-           OR COALESCE(stars_pct_growth_7d, 0) >= 15
+        -- Prefer 7d growth once snapshot history exists; fall back to
+        -- observed star delta across known snapshots (early pipeline).
+        SELECT COUNT(*)::int FROM (
+          SELECT g.repository_id
+          FROM v_repository_growth g
+          WHERE COALESCE(g.stars_gained_7d, 0) >= 50
+             OR COALESCE(g.stars_pct_growth_7d, 0) >= 15
+             OR COALESCE(g.stars_gained_30d, 0) >= 100
+          UNION
+          SELECT s.repository_id
+          FROM github_repo_snapshots s
+          GROUP BY s.repository_id
+          HAVING MAX(s.stars) - MIN(s.stars) >= 20
+        ) growers
       ) AS fast_growers,
       (SELECT COUNT(*)::int FROM v_hidden_gems) AS hidden_gems,
       (
@@ -109,15 +118,11 @@ export async function getIntelligenceStats(): Promise<IntelligenceStats> {
       )::float AS median_discovery_lead_days,
       (
         SELECT COUNT(*)::int
-        FROM v_repository_discovery d
-        LEFT JOIN v_stars_at_discovery s ON s.repository_id = d.repository_id
-        WHERE d.created_at_github IS NOT NULL
-          AND d.days_to_discovery IS NOT NULL
-          AND d.days_to_discovery >= 0
-          AND d.days_to_discovery <= 90
-          AND COALESCE(s.stars_at_discovery, d.stars, 0) < 1000
+        FROM v_stars_at_discovery
+        WHERE stars_at_discovery IS NOT NULL
+          AND stars_at_discovery < 1000
       ) AS ahead_before_1k,
-      (SELECT COUNT(*)::int FROM telegram_posts) AS total_posts
+      (SELECT COUNT(*)::int FROM telegram_repo_mentions) AS total_mentions
   `;
   return (
     rows[0] ?? {
@@ -127,7 +132,7 @@ export async function getIntelligenceStats(): Promise<IntelligenceStats> {
       hidden_gems: 0,
       median_discovery_lead_days: null,
       ahead_before_1k: 0,
-      total_posts: 0,
+      total_mentions: 0,
     }
   );
 }

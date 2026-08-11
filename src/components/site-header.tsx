@@ -17,11 +17,11 @@ export function SiteHeader() {
 
   return (
     <header className="border-b-2 border-[var(--rule-strong)] bg-[var(--paper)]/95 backdrop-blur-[2px]">
-      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 sm:px-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <Link href="/" className="group inline-block">
-              <p className="font-serif text-3xl font-semibold leading-none tracking-tight text-[var(--ink)] sm:text-4xl">
+              <p className="font-serif text-2xl font-semibold leading-none tracking-tight text-[var(--ink)] sm:text-3xl">
                 GITHUB{" "}
                 <span className="relative inline-block">
                   RADAR
@@ -29,20 +29,20 @@ export function SiteHeader() {
                 </span>
               </p>
             </Link>
-            <p className="mt-2 font-sans text-sm text-[var(--ink-muted)]">
+            <p className="mt-1.5 font-sans text-sm text-[var(--ink-muted)]">
               Open-source projects worth watching.
             </p>
           </div>
-          <form action="/repositories" method="get" className="w-full sm:w-64">
+          <form action="/repositories" method="get" className="w-full sm:w-56">
             <input
               type="search"
               name="q"
               placeholder="Search archive…"
-              className="w-full border border-[var(--rule-strong)] bg-[var(--paper-elevated)] px-3 py-2 font-sans text-sm text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)] focus:border-[var(--signal)]"
+              className="w-full border border-[var(--rule-strong)] bg-[var(--paper-elevated)] px-3 py-1.5 font-sans text-sm text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)] focus:border-[var(--signal)]"
             />
           </form>
         </div>
-        <nav className="flex flex-wrap gap-x-6 gap-y-2 border-t border-[var(--rule)] pt-3">
+        <nav className="flex flex-wrap gap-x-5 gap-y-2 border-t border-[var(--rule)] pt-2.5">
           {NAV.map((item) => {
             const active =
               item.href === "/"
