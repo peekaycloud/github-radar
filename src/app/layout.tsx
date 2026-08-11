@@ -29,10 +29,6 @@ export const metadata: Metadata = {
   },
   description:
     "Open-source projects discovered through the community — Telegram discovery history meets GitHub growth intelligence.",
-  icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
-  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
