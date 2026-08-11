@@ -17,9 +17,9 @@ export default async function TimelinePage({
 
   return (
     <div className="space-y-10">
-      <SectionRule title="Timeline" kicker="Discovery calendar" />
+      <SectionRule title="Discoveries" kicker="Day-by-day archive" />
       <p className="max-w-2xl font-sans text-sm text-[var(--ink-muted)]">
-        Each day is a dispatch from the channel — repositories first seen on
+        Each day is a dispatch from the channels — repositories first seen on
         that date.
       </p>
 

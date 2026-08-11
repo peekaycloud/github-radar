@@ -36,16 +36,142 @@ export async function getCommunityStats(): Promise<CommunityStats> {
 }
 
 export async function getTodaysRadar(limit = 12): Promise<DiscoveryRow[]> {
-  return sql<DiscoveryRow[]>`
+  const rows = await sql<DiscoveryRow[]>`
     SELECT
       d.*,
       ds.discovery_score,
-      g.stars_gained_7d
+      g.stars_gained_7d,
+      g.stars_gained_30d,
+      g.stars_pct_growth_7d,
+      CASE
+        WHEN snap30.stars IS NOT NULL AND snap30.stars > 0
+        THEN ((COALESCE(d.stars, 0) - snap30.stars)::float / snap30.stars::float) * 100.0
+        ELSE NULL
+      END AS stars_pct_growth_30d,
+      sad.stars_at_discovery
     FROM v_repository_discovery d
     LEFT JOIN v_discovery_score ds ON ds.repository_id = d.repository_id
     LEFT JOIN v_repository_growth g ON g.repository_id = d.repository_id
+    LEFT JOIN v_stars_at_discovery sad ON sad.repository_id = d.repository_id
+    LEFT JOIN LATERAL (
+      SELECT s.stars
+      FROM github_repo_snapshots s
+      WHERE s.repository_id = d.repository_id
+        AND s.captured_at <= NOW() - INTERVAL '30 days'
+      ORDER BY s.captured_at DESC
+      LIMIT 1
+    ) snap30 ON TRUE
     WHERE d.first_discovered_at IS NOT NULL
     ORDER BY d.first_discovered_at DESC NULLS LAST
+    LIMIT ${limit}
+  `;
+
+  const withCats = await Promise.all(
+    rows.map(async (row) => ({
+      ...row,
+      categories: await getRepoCategories(row.repository_id),
+    }))
+  );
+  return withCats;
+}
+
+export type IntelligenceStats = {
+  total_repositories: number;
+  discoveries_this_month: number;
+  fast_growers: number;
+  hidden_gems: number;
+  median_discovery_lead_days: number | null;
+  ahead_before_1k: number;
+  total_posts: number;
+};
+
+export async function getIntelligenceStats(): Promise<IntelligenceStats> {
+  const rows = await sql<IntelligenceStats[]>`
+    SELECT
+      (SELECT COUNT(*)::int FROM repositories) AS total_repositories,
+      (
+        SELECT COUNT(DISTINCT repository_id)::int
+        FROM telegram_repo_mentions m
+        JOIN telegram_posts p ON p.id = m.telegram_post_id
+        WHERE COALESCE(m.discovered_at, p.posted_at) >= NOW() - INTERVAL '30 days'
+      ) AS discoveries_this_month,
+      (
+        SELECT COUNT(*)::int
+        FROM v_repository_growth
+        WHERE COALESCE(stars_gained_7d, 0) >= 50
+           OR COALESCE(stars_pct_growth_7d, 0) >= 15
+      ) AS fast_growers,
+      (SELECT COUNT(*)::int FROM v_hidden_gems) AS hidden_gems,
+      (
+        SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY days_to_discovery)
+        FROM v_repository_discovery
+        WHERE days_to_discovery IS NOT NULL AND days_to_discovery >= 0
+      )::float AS median_discovery_lead_days,
+      (
+        SELECT COUNT(*)::int
+        FROM v_repository_discovery d
+        LEFT JOIN v_stars_at_discovery s ON s.repository_id = d.repository_id
+        WHERE d.created_at_github IS NOT NULL
+          AND d.days_to_discovery IS NOT NULL
+          AND d.days_to_discovery >= 0
+          AND d.days_to_discovery <= 90
+          AND COALESCE(s.stars_at_discovery, d.stars, 0) < 1000
+      ) AS ahead_before_1k,
+      (SELECT COUNT(*)::int FROM telegram_posts) AS total_posts
+  `;
+  return (
+    rows[0] ?? {
+      total_repositories: 0,
+      discoveries_this_month: 0,
+      fast_growers: 0,
+      hidden_gems: 0,
+      median_discovery_lead_days: null,
+      ahead_before_1k: 0,
+      total_posts: 0,
+    }
+  );
+}
+
+export type CategoryMomentum = {
+  name: string;
+  slug: string;
+  recent: number;
+  previous: number;
+  delta: number;
+};
+
+export async function getCategoryMomentum(limit = 6): Promise<CategoryMomentum[]> {
+  return sql<CategoryMomentum[]>`
+    WITH recent AS (
+      SELECT c.slug, c.name, COUNT(DISTINCT m.repository_id)::int AS n
+      FROM repository_categories rc
+      JOIN categories c ON c.id = rc.category_id
+      JOIN telegram_repo_mentions m ON m.repository_id = rc.repository_id
+      JOIN telegram_posts p ON p.id = m.telegram_post_id
+      WHERE COALESCE(m.discovered_at, p.posted_at) >= NOW() - INTERVAL '30 days'
+        AND c.slug NOT IN ('other', 'open-source')
+      GROUP BY c.slug, c.name
+    ),
+    previous AS (
+      SELECT c.slug, COUNT(DISTINCT m.repository_id)::int AS n
+      FROM repository_categories rc
+      JOIN categories c ON c.id = rc.category_id
+      JOIN telegram_repo_mentions m ON m.repository_id = rc.repository_id
+      JOIN telegram_posts p ON p.id = m.telegram_post_id
+      WHERE COALESCE(m.discovered_at, p.posted_at) >= NOW() - INTERVAL '60 days'
+        AND COALESCE(m.discovered_at, p.posted_at) < NOW() - INTERVAL '30 days'
+        AND c.slug NOT IN ('other', 'open-source')
+      GROUP BY c.slug
+    )
+    SELECT
+      r.name,
+      r.slug,
+      r.n AS recent,
+      COALESCE(p.n, 0) AS previous,
+      (r.n - COALESCE(p.n, 0)) AS delta
+    FROM recent r
+    LEFT JOIN previous p ON p.slug = r.slug
+    ORDER BY delta DESC, r.n DESC
     LIMIT ${limit}
   `;
 }

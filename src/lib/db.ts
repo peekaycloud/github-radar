@@ -62,4 +62,7 @@ export type DiscoveryRow = Repository & {
   growth_pct?: number | null;
   ahead_score?: number | null;
   gem_score?: number | null;
+  stars_pct_growth_7d?: number | null;
+  stars_pct_growth_30d?: number | null;
+  categories?: { slug: string; name: string }[];
 };
