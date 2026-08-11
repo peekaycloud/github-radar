@@ -261,6 +261,25 @@ def parse_repo_html(html: str, *, owner: str, repo: str) -> EnrichmentResult:
                 if date_created:
                     result.created_at_github = _parse_datetime(str(date_created))
 
+    # GitHub embeds createdAt in application/json payloads (no API needed)
+    if result.created_at_github is None:
+        for script in soup.select('script[type="application/json"]'):
+            blob = script.string or ""
+            if "createdAt" not in blob:
+                continue
+            match = re.search(
+                r'"createdAt"\s*:\s*"([^"]+)"',
+                blob,
+            )
+            if match:
+                result.created_at_github = _parse_datetime(match.group(1))
+                if result.created_at_github:
+                    break
+    if result.created_at_github is None:
+        match = re.search(r'"createdAt"\s*:\s*"([^"]+)"', html)
+        if match:
+            result.created_at_github = _parse_datetime(match.group(1))
+
     # About sidebar "Used by" / watchers fallback via strong counters
     for row in soup.select(".BorderGrid-row, .BorderGrid-cell"):
         text = row.get_text(" ", strip=True)
@@ -341,6 +360,9 @@ def select_enrichment_queue(limit: int) -> list[dict[str, Any]]:
           WHERE m.repository_id = r.id
         ) AS last_mentioned_at,
         CASE
+          -- 0. Missing creation date (required for Ahead of the Curve)
+          WHEN r.created_at_github IS NULL
+            AND r.enrichment_status = 'success' THEN 110
           -- 1. Never successfully enriched
           WHEN r.enrichment_status IS NULL
             OR r.enrichment_status IN ('pending', 'failed')

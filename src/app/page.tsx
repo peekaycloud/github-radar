@@ -33,18 +33,19 @@ export default async function HomePage() {
   ];
 
   return (
-    <div className="space-y-14">
-      <section className="max-w-3xl">
-        <p className="font-sans text-[11px] uppercase tracking-[0.2em] text-[var(--signal)]">
-          Daily intelligence
+    <div className="space-y-16">
+      <section className="animate-masthead max-w-3xl border-b-2 border-[var(--rule-strong)] pb-10">
+        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-[var(--signal)]">
+          Daily dispatch
         </p>
-        <h1 className="mt-3 font-serif text-4xl leading-tight text-[var(--ink)] sm:text-5xl">
-          What interesting open-source is emerging — and who saw it first?
+        <h1 className="mt-4 font-serif text-4xl font-semibold leading-[1.08] tracking-tight text-[var(--ink)] sm:text-6xl">
+          What is emerging —
+          <br />
+          <span className="text-[var(--signal)]">and who saw it first?</span>
         </h1>
-        <p className="mt-4 max-w-2xl font-sans text-base leading-relaxed text-[var(--ink-muted)]">
-          GitHub Radar combines a public Telegram discovery channel with
-          historical repository growth. The signal is not star count alone — it
-          is timing, repetition, and trajectory.
+        <p className="mt-5 max-w-xl font-sans text-base leading-relaxed text-[var(--ink-muted)]">
+          Timing over hype. Channel discoveries, public GitHub signals, and
+          growth trajectory in one editorial brief.
         </p>
       </section>
 
@@ -55,7 +56,7 @@ export default async function HomePage() {
         {radar.length === 0 ? (
           <EmptyState message="No discoveries yet. Run the historical import to populate the radar." />
         ) : (
-          <div className="divide-y divide-[var(--rule)] border-t border-[var(--rule)]">
+          <div className="border-t-2 border-[var(--rule-strong)]">
             {radar.map((repo) => (
               <RepoCard key={repo.repository_id} repo={repo} />
             ))}
@@ -63,7 +64,7 @@ export default async function HomePage() {
         )}
       </section>
 
-      <div className="grid gap-12 lg:grid-cols-2">
+      <div className="grid gap-14 lg:grid-cols-2 lg:gap-10">
         <section>
           <SectionRule
             title="Ahead of the Curve"
@@ -71,9 +72,9 @@ export default async function HomePage() {
             href="/ahead-of-curve"
           />
           {ahead.length === 0 ? (
-            <EmptyState message="Enrichment snapshots needed for growth-since-discovery rankings." />
+            <EmptyState message="Waiting on repository creation dates from enrichment — re-run the enricher." />
           ) : (
-            <div>
+            <div className="border-t-2 border-[var(--rule-strong)]">
               {ahead.map((repo) => (
                 <RepoCard key={repo.repository_id} repo={repo} emphasis="ahead" />
               ))}
@@ -89,7 +90,7 @@ export default async function HomePage() {
           {gems.length === 0 ? (
             <EmptyState message="Gems appear after enrichment provides growth signals." />
           ) : (
-            <div>
+            <div className="border-t-2 border-[var(--rule-strong)]">
               {gems.map((repo) => (
                 <RepoCard key={repo.repository_id} repo={repo} emphasis="gem" />
               ))}
