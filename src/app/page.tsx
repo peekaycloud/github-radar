@@ -70,9 +70,11 @@ export default async function HomePage() {
       <section>
         <div
           className={`grid gap-px border-2 border-[var(--rule-strong)] bg-[var(--rule-strong)] ${
-            kpis.length >= 5
-              ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
-              : "grid-cols-2 sm:grid-cols-4"
+            kpis.length === 5
+              ? "grid-cols-2 sm:grid-cols-5"
+              : kpis.length === 4
+                ? "grid-cols-2 sm:grid-cols-4"
+                : "grid-cols-2 sm:grid-cols-3"
           }`}
         >
           {kpis.map((k) => (
