@@ -71,5 +71,7 @@ WHERE COALESCE(d.stars, 0) < 2000
   )
   AND (
     COALESCE(g.stars_pct_growth_7d, 0) >= 20
-    OR COALESCE(s.stars_pct_observed, 0) >= 3
+    -- Observed snapshot % is short-window until history deepens;
+    -- require meaningful positive growth, not a flat 0%.
+    OR COALESCE(s.stars_pct_observed, 0) >= 1
   );
