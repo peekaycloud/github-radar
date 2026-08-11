@@ -19,7 +19,6 @@ export default async function HomePage() {
 
   const metrics = [
     { label: "Repositories", value: formatNumber(stats.total_repositories) },
-    { label: "Telegram mentions", value: formatNumber(stats.total_mentions) },
     {
       label: "New this week",
       value: formatNumber(stats.new_discoveries_this_week),
@@ -28,6 +27,7 @@ export default async function HomePage() {
       label: "Tracked / enriched",
       value: formatNumber(stats.repositories_enriched),
     },
+    { label: "Telegram posts", value: formatNumber(stats.total_telegram_posts) },
     { label: "Categories", value: formatNumber(stats.total_categories) },
     { label: "Average stars", value: formatNumber(Math.round(stats.avg_stars)) },
   ];

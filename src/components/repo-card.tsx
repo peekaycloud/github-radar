@@ -80,7 +80,6 @@ export function RepoCard({ repo, emphasis }: { repo: DiscoveryRow; emphasis?: "g
       ) : null}
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-sans text-[11px] uppercase tracking-[0.08em] text-[var(--ink-faint)]">
         <span>Discovered {formatDate(repo.first_discovered_at)}</span>
-        {repo.mention_count != null ? <span>{repo.mention_count} mentions</span> : null}
         {repo.stars_gained_7d != null && repo.stars_gained_7d !== 0 ? (
           <span className="text-[var(--accent)]">
             {repo.stars_gained_7d > 0 ? "+" : ""}

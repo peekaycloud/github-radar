@@ -105,10 +105,9 @@ export default async function RepoDetailPage({
         <h2 className="mb-4 border-b border-[var(--rule)] pb-2 font-serif text-2xl">
           Telegram Discovery
         </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Meta label="First mentioned" value={formatDate(repository.first_discovered_at)} />
-          <Meta label="Last mentioned" value={formatDate(repository.last_mentioned_at)} />
-          <Meta label="Mentions" value={formatNumber(repository.mention_count)} />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Meta label="First discovered" value={formatDate(repository.first_discovered_at)} />
+          <Meta label="Last seen on channel" value={formatDate(repository.last_mentioned_at)} />
           <Meta
             label="Days to discovery"
             value={

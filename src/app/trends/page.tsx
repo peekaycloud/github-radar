@@ -21,8 +21,8 @@ export default async function TrendsPage() {
       <div className="grid gap-px border border-[var(--rule)] bg-[var(--rule)] sm:grid-cols-3">
         {[
           ["Corpus", formatNumber(stats.total_repositories)],
-          ["Mentions", formatNumber(stats.total_mentions)],
-          ["Posts", formatNumber(stats.total_telegram_posts)],
+          ["Telegram posts", formatNumber(stats.total_telegram_posts)],
+          ["Enriched", formatNumber(stats.repositories_enriched)],
         ].map(([label, value]) => (
           <div key={label} className="bg-[var(--paper)] px-5 py-6">
             <p className="font-sans text-[10px] uppercase tracking-[0.16em] text-[var(--ink-muted)]">
