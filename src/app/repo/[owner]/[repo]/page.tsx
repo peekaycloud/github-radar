@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { GrowthChart } from "@/components/charts";
+import { GrowthPanel } from "@/components/charts";
 import {
   formatDate,
   formatNumber,
@@ -28,11 +28,8 @@ export default async function RepoDetailPage({
     getRepoCategories(repository.repository_id),
   ]);
 
-  const chartData = snapshots.map((s) => ({
-    date: new Date(s.captured_at).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    }),
+  const growthSnapshots = snapshots.map((s) => ({
+    capturedAt: s.captured_at,
     stars: s.stars,
     forks: s.forks,
   }));
@@ -200,13 +197,7 @@ export default async function RepoDetailPage({
         <h2 className="mb-4 border-b border-[var(--rule)] pb-2 font-serif text-2xl">
           Growth
         </h2>
-        <GrowthChart data={chartData} metric="stars" />
-        {snapshots.length > 0 && snapshots.length < 2 ? (
-          <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--ink-faint)]">
-            Snapshot history starts at first enrichment — not Telegram discovery
-            date
-          </p>
-        ) : null}
+        <GrowthPanel snapshots={growthSnapshots} />
       </section>
 
       <section>
