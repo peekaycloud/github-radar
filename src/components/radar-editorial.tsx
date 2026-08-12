@@ -119,9 +119,12 @@ export function MomentumBars({
   const max = Math.max(...items.map((i) => Math.abs(i.delta) || i.recent), 1);
 
   return (
-    <div className="space-y-2">
+    <div className="divide-y divide-[var(--rule)]">
       {items.map((item) => (
-        <div key={item.name} className="grid grid-cols-[6.5rem_1fr_5rem] items-center gap-2">
+        <div
+          key={item.name}
+          className="grid grid-cols-[6.5rem_1fr_5rem] items-center gap-2 py-2 first:pt-1 last:pb-1"
+        >
           <span className="truncate font-sans text-sm text-[var(--ink)]">{item.name}</span>
           <div className="h-[5px] bg-[var(--rule)]/40">
             <div
@@ -152,7 +155,7 @@ export function CompactRepoRow({
   return (
     <Link
       href={href}
-      className="flex items-baseline justify-between gap-3 border-b border-[var(--rule)] py-1.5 last:border-b-0 hover:bg-[var(--paper-elevated)]"
+      className="flex items-baseline justify-between gap-3 border-b border-[var(--rule)] py-2 first:pt-1 last:border-b-0 last:pb-1 hover:bg-[var(--paper)]/60"
     >
       <span className="min-w-0 truncate font-sans text-sm text-[var(--ink)]">{name}</span>
       <span className="shrink-0 font-mono text-sm tabular-nums text-[var(--signal)]">

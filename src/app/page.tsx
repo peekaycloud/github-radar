@@ -37,7 +37,7 @@ export default async function HomePage({
     getIntelligenceStats(),
     getTodaysRadar(4),
     getCategoryMomentum(6, windowDays),
-    getFastestMoving(5),
+    getFastestMoving(6),
     getDiscoverySpotlight(),
   ]);
 
@@ -82,27 +82,36 @@ export default async function HomePage({
     <div className="space-y-7">
       <section>
         <div
-          className={`grid gap-px border-2 border-[var(--rule-strong)] bg-[var(--rule-strong)] ${
-            kpis.length === 5
-              ? "grid-cols-2 sm:grid-cols-5"
-              : "grid-cols-2 sm:grid-cols-4"
+          className={`grid grid-cols-2 gap-px border-2 border-[var(--rule-strong)] bg-[var(--rule-strong)] ${
+            kpis.length === 5 ? "sm:grid-cols-5" : "sm:grid-cols-4"
           }`}
         >
-          {kpis.map((k) => (
-            <div key={k.label} className="bg-[var(--paper)] px-3 py-2.5">
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
-                {k.label}
-              </p>
-              <p className="mt-0.5 font-serif text-xl font-semibold tabular-nums leading-none text-[var(--ink)]">
-                {k.value}
-              </p>
-              {k.hint ? (
-                <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
-                  {k.hint}
+          {kpis.map((k, i) => {
+            const spanLastOnMobile =
+              kpis.length % 2 === 1 && i === kpis.length - 1;
+            return (
+              <div
+                key={k.label}
+                className={
+                  spanLastOnMobile
+                    ? "col-span-2 bg-[var(--paper)] px-3 py-2.5 sm:col-span-1"
+                    : "bg-[var(--paper)] px-3 py-2.5"
+                }
+              >
+                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
+                  {k.label}
                 </p>
-              ) : null}
-            </div>
-          ))}
+                <p className="mt-0.5 font-serif text-xl font-semibold tabular-nums leading-none text-[var(--ink)]">
+                  {k.value}
+                </p>
+                {k.hint ? (
+                  <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
+                    {k.hint}
+                  </p>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       </section>
 
@@ -119,24 +128,24 @@ export default async function HomePage({
         )}
       </section>
 
-      {/* Single two-column intelligence block */}
-      <section className="grid gap-6 border-t border-[var(--rule)] pt-6 lg:grid-cols-2 lg:gap-8">
-        <div>
+      {/* Matched two-column intelligence panels */}
+      <section className="grid items-stretch gap-6 border-t border-[var(--rule)] pt-6 lg:grid-cols-2 lg:gap-8">
+        <div className="flex min-h-0 flex-col">
           <SectionRule
             title="What’s accelerating"
             kicker="Trending categories"
             href="/trends"
             compact
           />
-          <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="mb-2 flex min-h-5 items-center justify-between gap-3">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
               Additional repos vs prior {windowDays}d
             </p>
             <MomentumWindowTabs active={windowDays} />
           </div>
-          <div className="border border-[var(--rule-strong)] bg-[var(--paper-elevated)] p-3.5">
+          <div className="flex flex-1 flex-col border border-[var(--rule-strong)] bg-[var(--paper-elevated)] px-3.5 py-2">
             {momentum.length === 0 ? (
-              <p className="font-sans text-sm text-[var(--ink-muted)]">
+              <p className="py-2 font-sans text-sm text-[var(--ink-muted)]">
                 Category momentum appears as classifications accumulate.
               </p>
             ) : (
@@ -145,16 +154,24 @@ export default async function HomePage({
           </div>
         </div>
 
-        <div>
+        <div className="flex min-h-0 flex-col">
           <SectionRule
             title="Fastest moving"
             kicker="Star growth · observed"
             href="/trending"
             compact
           />
-          <div className="border border-[var(--rule-strong)] px-3">
+          <div className="mb-2 flex min-h-5 items-center justify-between gap-3">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
+              Observed star growth
+            </p>
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
+              Top {fastest.length || 6}
+            </span>
+          </div>
+          <div className="flex flex-1 flex-col border border-[var(--rule-strong)] bg-[var(--paper-elevated)] px-3.5 py-2">
             {fastest.length === 0 ? (
-              <p className="py-3 font-sans text-sm text-[var(--ink-muted)]">
+              <p className="py-2 font-sans text-sm text-[var(--ink-muted)]">
                 Growth rankings unlock as daily snapshots accumulate.
               </p>
             ) : (
