@@ -33,6 +33,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Enrich pending repositories
+        id: enrich
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ENRICH_CONCURRENCY: "3"
@@ -42,3 +43,16 @@ jobs:
           if [ -z "$LIMIT" ]; then LIMIT=400; fi
           echo "Enriching up to $LIMIT repos…"
           python scripts/github_enricher.py --limit "$LIMIT"
+
+      - name: Refresh read models
+        if: ${{ !cancelled() }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scripts/refresh_read_models.py
+
+      - name: Publish updates to the site
+        if: ${{ !cancelled() }}
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+        run: python scripts/revalidate_site.py

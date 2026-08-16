@@ -141,6 +141,7 @@ def parse_repo_html(html: str, *, owner: str, repo: str) -> EnrichmentResult:
             result.description = desc_el.get_text(" ", strip=True) or None
 
     # Social counts via #repo-stars-counter-star etc.
+    # Prefer title/aria-label (exact "364,110") over visible "364k".
     for attr, field_name in (
         ("#repo-stars-counter-star", "stars"),
         ("#repo-network-counter", "forks"),
@@ -148,8 +149,8 @@ def parse_repo_html(html: str, *, owner: str, repo: str) -> EnrichmentResult:
     ):
         el = soup.select_one(attr)
         if el:
-            title = el.get("title") or el.get_text()
-            setattr(result, field_name, _parse_count(title))
+            raw = el.get("title") or el.get("aria-label") or el.get_text()
+            setattr(result, field_name, _parse_count(raw))
 
     # Fallback: aria-label counters in sidebar
     if result.stars is None:
@@ -341,60 +342,88 @@ class GitHubEnricher:
 
 
 def select_enrichment_queue(limit: int) -> list[dict[str, Any]]:
-    """Priority queue for enrichment (see product strategy)."""
-    sql = """
-    WITH ranked AS (
-      SELECT
-        r.id,
-        r.owner,
-        r.repo_name,
-        r.full_name,
-        r.github_url,
-        r.stars,
-        r.last_enriched_at,
-        r.enrichment_status,
-        (
-          SELECT MAX(COALESCE(m.discovered_at, p.posted_at))
-          FROM telegram_repo_mentions m
-          JOIN telegram_posts p ON p.id = m.telegram_post_id
-          WHERE m.repository_id = r.id
-        ) AS last_mentioned_at,
-        CASE
-          -- 0. Missing creation date (required for Ahead of the Curve)
-          WHEN r.created_at_github IS NULL
-            AND r.enrichment_status = 'success' THEN 110
-          -- 1. Never successfully enriched
-          WHEN r.enrichment_status IS NULL
-            OR r.enrichment_status IN ('pending', 'failed')
-            OR r.last_enriched_at IS NULL THEN 100
-          -- 2. Newly / recently mentioned
-          WHEN EXISTS (
-            SELECT 1 FROM telegram_repo_mentions m
-            JOIN telegram_posts p ON p.id = m.telegram_post_id
-            WHERE m.repository_id = r.id
-              AND COALESCE(m.discovered_at, p.posted_at) > NOW() - INTERVAL '48 hours'
-          ) THEN 90
-          -- 3. Stale (>24h) and relatively popular
-          WHEN r.last_enriched_at < NOW() - INTERVAL '24 hours'
-            AND COALESCE(r.stars, 0) >= 500 THEN 70
-          -- 4. Stale (>24h) active
-          WHEN r.last_enriched_at < NOW() - INTERVAL '24 hours' THEN 50
-          -- 5. Dormant refresh (>7 days)
-          WHEN r.last_enriched_at < NOW() - INTERVAL '7 days' THEN 30
-          ELSE 0
-        END AS priority
+    """Split each batch so backfill cannot starve star refreshes.
+
+    The 20k never-enriched backlog used to consume every run (priority 100),
+    so Ahead of Curve / Trending repos never got a second star capture.
+    """
+    limit = max(int(limit), 1)
+    ahead_n = max(limit // 3, 1)
+    first_n = max(limit // 2, 1)
+    refresh_n = max(limit - first_n - ahead_n, 1)
+
+    first_sql = """
+      SELECT r.id, r.owner, r.repo_name, r.full_name, r.github_url, r.stars,
+             r.last_enriched_at, r.enrichment_status, 100 AS priority
       FROM repositories r
       WHERE r.owner IS NOT NULL AND r.repo_name IS NOT NULL
-    )
-    SELECT * FROM ranked
-    WHERE priority > 0
-    ORDER BY priority DESC, last_mentioned_at DESC NULLS LAST, stars DESC NULLS LAST
-    LIMIT %s
+        AND (
+          r.last_enriched_at IS NULL
+          OR r.enrichment_status IS NULL
+          OR r.enrichment_status IN ('pending', 'failed', 'partial')
+          OR r.stars IS NULL
+          OR r.created_at_github IS NULL
+        )
+      ORDER BY r.last_enriched_at NULLS FIRST, COALESCE(r.stars, 0) DESC
+      LIMIT %s
     """
+    refresh_sql = """
+      SELECT r.id, r.owner, r.repo_name, r.full_name, r.github_url, r.stars,
+             r.last_enriched_at, r.enrichment_status, 70 AS priority
+      FROM repositories r
+      WHERE r.owner IS NOT NULL AND r.repo_name IS NOT NULL
+        AND r.enrichment_status = 'success'
+        AND r.stars IS NOT NULL
+        AND r.last_enriched_at < NOW() - INTERVAL '12 hours'
+      ORDER BY COALESCE(r.stars, 0) DESC, r.last_enriched_at ASC
+      LIMIT %s
+    """
+    ahead_sql = """
+      SELECT r.id, r.owner, r.repo_name, r.full_name, r.github_url, r.stars,
+             r.last_enriched_at, r.enrichment_status, 85 AS priority
+      FROM mv_repository_discovery disc
+      JOIN repositories r ON r.id = disc.repository_id
+      WHERE r.owner IS NOT NULL AND r.repo_name IS NOT NULL
+        AND r.created_at_github IS NOT NULL
+        AND disc.days_to_discovery IS NOT NULL
+        AND disc.days_to_discovery >= 0
+        AND COALESCE(r.stars, 0) >= 50
+        AND (
+          r.last_enriched_at IS NULL
+          OR r.last_enriched_at < NOW() - INTERVAL '4 hours'
+        )
+      ORDER BY
+        (
+          EXP(-GREATEST(disc.days_to_discovery, 0) / 45.0)
+          * LN(1 + COALESCE(disc.mention_count, 1))
+          * LN(1 + COALESCE(r.stars, 0))
+          * CASE
+              WHEN disc.days_to_discovery <= 30 THEN 1.4
+              WHEN disc.days_to_discovery <= 90 THEN 1.15
+              ELSE 1.0
+            END
+        ) DESC
+      LIMIT %s
+    """
+
+    seen: set[str] = set()
+    rows: list[dict[str, Any]] = []
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, (limit,))
-            return list(cur.fetchall())
+            for query, n in (
+                (ahead_sql, ahead_n),
+                (refresh_sql, refresh_n),
+                (first_sql, first_n),
+            ):
+                cur.execute(query, (n,))
+                for row in cur.fetchall():
+                    rid = str(row["id"])
+                    if rid in seen:
+                        continue
+                    seen.add(rid)
+                    rows.append(row)
+    rows.sort(key=lambda r: int(r.get("priority") or 0), reverse=True)
+    return rows[:limit]
 
 
 def should_write_snapshot(
@@ -449,6 +478,7 @@ def persist_enrichment(repository_id: str, result: EnrichmentResult, *, success:
     with get_connection() as conn:
         with conn.cursor() as cur:
             if success:
+                status = "success" if result.stars is not None else "partial"
                 cur.execute(
                     """
                     UPDATE repositories SET
@@ -469,7 +499,7 @@ def persist_enrichment(repository_id: str, result: EnrichmentResult, *, success:
                       updated_at_github = COALESCE(%s, updated_at_github),
                       pushed_at_github = COALESCE(%s, pushed_at_github),
                       last_enriched_at = NOW(),
-                      enrichment_status = 'success',
+                      enrichment_status = %s,
                       enrichment_error = NULL
                     WHERE id = %s::uuid
                     """,
@@ -490,10 +520,11 @@ def persist_enrichment(repository_id: str, result: EnrichmentResult, *, success:
                         result.created_at_github,
                         result.updated_at_github,
                         result.pushed_at_github,
+                        status,
                         repository_id,
                     ),
                 )
-                if should_write_snapshot(
+                if result.stars is not None and should_write_snapshot(
                     cur,
                     repository_id,
                     stars=result.stars,
@@ -562,6 +593,15 @@ async def run_enrichment(*, limit: int, dry_run: bool) -> None:
                     return
                 try:
                     result = await enricher.enrich_one(client, owner, repo)
+                    if result.stars is None and result.created_at_github is None:
+                        persist_enrichment(
+                            rid,
+                            EnrichmentResult(raw_error="parsed neither stars nor createdAt"),
+                            success=False,
+                        )
+                        failed += 1
+                        print(f"EMPTY {owner}/{repo} — no stars/createdAt in HTML")
+                        return
                     persist_enrichment(rid, result, success=True)
                     success += 1
                     print(
@@ -598,6 +638,11 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     asyncio.run(run_enrichment(limit=args.limit, dry_run=args.dry_run))
+    if not args.dry_run:
+        from scripts.refresh_read_models import refresh_read_models
+
+        print("Refreshing read models…")
+        refresh_read_models()
 
 
 if __name__ == "__main__":

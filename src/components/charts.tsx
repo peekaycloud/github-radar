@@ -1,16 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-  ReferenceDot,
-} from "recharts";
 
 export type SnapshotPoint = {
   capturedAt: string;
@@ -274,67 +264,87 @@ export function GrowthPanel({ snapshots }: { snapshots: SnapshotPoint[] }) {
             </p>
           ) : null}
 
-          {/* Chart: zoomed Y domain so movement is visible */}
-          <div className="h-72 w-full border border-[var(--rule-strong)] bg-[var(--paper-elevated)] p-3">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={chartRows}
-                margin={{ top: 8, right: 12, left: 4, bottom: 4 }}
-              >
-                <CartesianGrid stroke="var(--rule)" strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="label"
-                  tick={{ fill: "var(--ink-muted)", fontSize: 11 }}
-                  stroke="var(--rule)"
-                  interval="preserveStartEnd"
-                  minTickGap={28}
-                />
-                <YAxis
-                  domain={yDomain}
-                  tick={{ fill: "var(--ink-muted)", fontSize: 11 }}
-                  stroke="var(--rule)"
-                  width={52}
-                  tickFormatter={(v) => formatStars(Number(v))}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--paper-elevated)",
-                    border: "1px solid var(--rule-strong)",
-                    borderRadius: 0,
-                    fontSize: 12,
-                  }}
-                  labelFormatter={(_, payload) => {
-                    const iso = payload?.[0]?.payload?.iso as string | undefined;
-                    return iso ? formatFullDate(iso) : "";
-                  }}
-                  formatter={(value) => [
-                    `★ ${formatStars(typeof value === "number" ? value : Number(value))}`,
-                    "Stars",
-                  ]}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="stars"
-                  stroke="var(--ink)"
-                  strokeWidth={1.75}
-                  dot={{ r: 3.5, fill: "var(--ink)", strokeWidth: 0 }}
-                  activeDot={{ r: 5 }}
-                  isAnimationActive={false}
-                />
-                {chartRows.length > 0 ? (
-                  <ReferenceDot
-                    x={chartRows[chartRows.length - 1].label}
-                    y={chartRows[chartRows.length - 1].stars}
-                    r={4}
-                    fill="var(--signal)"
-                    stroke="none"
-                  />
-                ) : null}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          <StarSparkline rows={chartRows} yDomain={yDomain} />
         </>
       )}
+    </div>
+  );
+}
+
+function StarSparkline({
+  rows,
+  yDomain,
+}: {
+  rows: ChartRow[];
+  yDomain: [number, number] | ["auto", "auto"];
+}) {
+  const width = 800;
+  const height = 260;
+  const pad = { l: 52, r: 16, t: 16, b: 32 };
+  const innerW = width - pad.l - pad.r;
+  const innerH = height - pad.t - pad.b;
+  const ys = rows.map((r) => r.stars);
+  const minY = yDomain[0] === "auto" ? Math.min(...ys) : yDomain[0];
+  const maxY = yDomain[1] === "auto" ? Math.max(...ys) : yDomain[1];
+  const span = Math.max(maxY - minY, 1);
+  const maxI = Math.max(rows.length - 1, 1);
+  const xAt = (i: number) => pad.l + (i / maxI) * innerW;
+  const yAt = (v: number) => pad.t + (1 - (v - minY) / span) * innerH;
+  const line = rows
+    .map((r, i) => `${i === 0 ? "M" : "L"}${xAt(i).toFixed(1)} ${yAt(r.stars).toFixed(1)}`)
+    .join(" ");
+  const yTicks = [minY, minY + span / 2, maxY];
+  const last = rows[rows.length - 1];
+
+  return (
+    <div className="h-72 w-full border border-[var(--rule-strong)] bg-[var(--paper-elevated)] p-3">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-full w-full"
+        role="img"
+        aria-label="Star growth"
+      >
+        {yTicks.map((tick) => (
+          <g key={tick}>
+            <line
+              x1={pad.l}
+              x2={width - pad.r}
+              y1={yAt(tick)}
+              y2={yAt(tick)}
+              stroke="var(--rule)"
+              strokeDasharray="3 3"
+            />
+            <text
+              x={pad.l - 8}
+              y={yAt(tick) + 4}
+              textAnchor="end"
+              fill="var(--ink-muted)"
+              fontSize="11"
+            >
+              {formatStars(tick)}
+            </text>
+          </g>
+        ))}
+        <path d={line} fill="none" stroke="var(--ink)" strokeWidth="1.75" />
+        {rows.map((r, i) => (
+          <circle key={r.iso} cx={xAt(i)} cy={yAt(r.stars)} r="3.5" fill="var(--ink)" />
+        ))}
+        {last ? (
+          <circle cx={xAt(rows.length - 1)} cy={yAt(last.stars)} r="4" fill="var(--signal)" />
+        ) : null}
+        <text x={pad.l} y={height - 8} fill="var(--ink-muted)" fontSize="11">
+          {rows[0]?.label}
+        </text>
+        <text
+          x={width - pad.r}
+          y={height - 8}
+          textAnchor="end"
+          fill="var(--ink-muted)"
+          fontSize="11"
+        >
+          {last?.label}
+        </text>
+      </svg>
     </div>
   );
 }

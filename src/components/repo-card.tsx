@@ -1,6 +1,8 @@
-import Link from "next/link";
+import { AppLink } from "@/components/app-link";
+import { RepoLink } from "@/components/repo-link";
 import { formatDate, formatNumber } from "@/lib/queries";
 import type { DiscoveryRow } from "@/lib/db";
+import { repoPath } from "@/lib/repo-path";
 
 export function MetricStrip({
   items,
@@ -70,12 +72,12 @@ export function SectionRule({
         />
       </div>
       {href ? (
-        <Link
+        <AppLink
           href={href}
           className="shrink-0 border-b border-[var(--ink)] pb-0.5 font-sans text-[11px] uppercase tracking-[0.14em] text-[var(--ink)] transition-colors hover:border-[var(--signal)] hover:text-[var(--signal)]"
         >
           View all →
-        </Link>
+        </AppLink>
       ) : null}
     </div>
   );
@@ -83,17 +85,24 @@ export function SectionRule({
 
 export function RepoCard({ repo, emphasis }: { repo: DiscoveryRow; emphasis?: "gem" | "ahead" }) {
   const name = repo.full_name || `${repo.owner}/${repo.repo_name}`;
-  const href = `/repo/${repo.owner}/${repo.repo_name}`;
+  const href = repoPath(repo.owner, repo.repo_name);
 
   return (
     <article className="group grid gap-2 border-b border-[var(--rule)] py-6 first:pt-1 last:border-b-0 sm:grid-cols-[1fr_auto] sm:items-baseline sm:gap-8">
       <div>
-        <Link
-          href={href}
-          className="font-serif text-xl font-semibold tracking-tight text-[var(--ink)] decoration-[var(--signal)] underline-offset-4 transition-colors group-hover:underline sm:text-2xl"
-        >
-          {name}
-        </Link>
+        {href ? (
+          <RepoLink
+            href={href}
+            repo={repo}
+            className="font-serif text-xl font-semibold tracking-tight text-[var(--ink)] decoration-[var(--signal)] underline-offset-4 transition-colors group-hover:underline sm:text-2xl"
+          >
+            {name}
+          </RepoLink>
+        ) : (
+          <span className="font-serif text-xl font-semibold tracking-tight text-[var(--ink)] sm:text-2xl">
+            {name}
+          </span>
+        )}
         {repo.description ? (
           <p className="mt-2 max-w-2xl font-sans text-sm leading-relaxed text-[var(--ink-muted)] line-clamp-2">
             {repo.description}

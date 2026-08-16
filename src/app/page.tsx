@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { PageShell } from "@/components/page-shell";
+import { RepoLink } from "@/components/repo-link";
 import { EmptyState, SectionRule } from "@/components/repo-card";
 import {
   CompactRepoRow,
@@ -15,9 +17,8 @@ import {
   getTodaysRadar,
   type MomentumWindow,
 } from "@/lib/queries";
-
-export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+import { cacheReadModel } from "@/lib/data/cache";
+import { repoPath } from "@/lib/repo-path";
 
 function parseMomentumWindow(raw?: string): MomentumWindow {
   if (raw === "7d") return 7;
@@ -25,13 +26,30 @@ function parseMomentumWindow(raw?: string): MomentumWindow {
   return 30;
 }
 
-export default async function HomePage({
+export default function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ m?: string }>;
+}) {
+  return (
+    <PageShell>
+      <HomePage searchParams={searchParams} />
+    </PageShell>
+  );
+}
+
+async function HomePage({
   searchParams,
 }: {
   searchParams: Promise<{ m?: string }>;
 }) {
   const params = await searchParams;
-  const windowDays = parseMomentumWindow(params.m);
+  return <CachedHome windowDays={parseMomentumWindow(params.m)} />;
+}
+
+async function CachedHome({ windowDays }: { windowDays: MomentumWindow }) {
+  "use cache";
+  cacheReadModel("catalog", "hours");
 
   const [stats, radar, momentum, fastest, spotlight] = await Promise.all([
     getIntelligenceStats(),
@@ -194,12 +212,13 @@ export default async function HomePage({
           <div className="border-2 border-[var(--rule-strong)] border-l-[3px] border-l-[var(--signal)] bg-[var(--paper-elevated)] px-4 py-3.5">
             <p className="font-serif text-lg leading-snug text-[var(--ink)]">
               The channel spotted{" "}
-              <Link
-                href={`/repo/${spotlight.owner}/${spotlight.repo_name}`}
+              <RepoLink
+                href={repoPath(spotlight.owner, spotlight.repo_name) ?? "/repositories"}
+                repo={spotlight}
                 className="underline decoration-[var(--signal)] underline-offset-2"
               >
                 {spotlightName}
-              </Link>
+              </RepoLink>
               {spotlightDays != null ? (
                 <>
                   {" "}

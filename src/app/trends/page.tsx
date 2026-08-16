@@ -1,9 +1,19 @@
 import { SectionRule } from "@/components/repo-card";
+import { PageShell } from "@/components/page-shell";
+import { cacheReadModel } from "@/lib/data/cache";
 import { formatNumber, getCategories, getCommunityStats, getTopOwners } from "@/lib/queries";
 
-export const dynamic = "force-dynamic";
+export default function Page() {
+  return (
+    <PageShell>
+      <TrendsPage />
+    </PageShell>
+  );
+}
 
-export default async function TrendsPage() {
+async function TrendsPage() {
+  "use cache";
+  cacheReadModel("stats", "hours");
   const [stats, owners, categories] = await Promise.all([
     getCommunityStats(),
     getTopOwners(25),

@@ -13,18 +13,18 @@ function createSql() {
   // Small pool for Vercel serverless; prefer session pooler :5432 when possible.
   return postgres(url, {
     ssl: "require",
-    max: 3,
-    idle_timeout: 10,
-    connect_timeout: 8,
+    max: 5,
+    idle_timeout: 20,
+    connect_timeout: 10,
     prepare: false,
+    connection: {
+      statement_timeout: 12000,
+    },
   });
 }
 
 export const sql = globalForDb.sql ?? createSql();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.sql = sql;
-}
+globalForDb.sql = sql;
 
 export type Repository = {
   id: string;
@@ -61,6 +61,8 @@ export type DiscoveryRow = Repository & {
   stars_gained_30d?: number | null;
   stars_at_discovery?: number | null;
   current_stars?: number | null;
+  baseline_stars?: number | null;
+  baseline_captured_at?: string | null;
   growth_multiple?: number | null;
   growth_pct?: number | null;
   ahead_score?: number | null;

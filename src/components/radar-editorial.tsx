@@ -1,6 +1,8 @@
-import Link from "next/link";
+import { AppLink } from "@/components/app-link";
+import { RepoLink } from "@/components/repo-link";
 import type { DiscoveryRow } from "@/lib/db";
 import { formatDateShort, formatNumber } from "@/lib/queries";
+import { repoPath } from "@/lib/repo-path";
 
 function growthPct(repo: DiscoveryRow): number | null {
   const candidates = [
@@ -24,7 +26,7 @@ export function EditorialRadarCard({
   index: number;
 }) {
   const name = repo.full_name || `${repo.owner}/${repo.repo_name}`;
-  const href = `/repo/${repo.owner}/${repo.repo_name}`;
+  const href = repoPath(repo.owner, repo.repo_name);
   const growth = growthPct(repo);
   const cats = (repo.categories ?? []).slice(0, 3);
   const earlyDays =
@@ -43,12 +45,19 @@ export function EditorialRadarCard({
 
         <div className="min-w-0">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
-            <Link
-              href={href}
-              className="font-serif text-base font-semibold tracking-tight text-[var(--ink)] hover:underline decoration-[var(--signal)] underline-offset-2 sm:text-lg"
-            >
-              {name}
-            </Link>
+            {href ? (
+              <RepoLink
+                href={href}
+                repo={repo}
+                className="font-serif text-base font-semibold tracking-tight text-[var(--ink)] hover:underline decoration-[var(--signal)] underline-offset-2 sm:text-lg"
+              >
+                {name}
+              </RepoLink>
+            ) : (
+              <span className="font-serif text-base font-semibold tracking-tight text-[var(--ink)] sm:text-lg">
+                {name}
+              </span>
+            )}
             <span className="font-mono text-sm tabular-nums text-[var(--ink)]">
               {repo.stars != null ? (
                 <>
@@ -151,17 +160,22 @@ export function CompactRepoRow({
   metric: string;
 }) {
   const name = repo.full_name || `${repo.owner}/${repo.repo_name}`;
-  const href = `/repo/${repo.owner}/${repo.repo_name}`;
-  return (
-    <Link
-      href={href}
-      className="flex items-baseline justify-between gap-3 border-b border-[var(--rule)] py-2 first:pt-1 last:border-b-0 last:pb-1 hover:bg-[var(--paper)]/60"
-    >
+  const href = repoPath(repo.owner, repo.repo_name);
+  const rowClass =
+    "flex items-baseline justify-between gap-3 border-b border-[var(--rule)] py-2 first:pt-1 last:border-b-0 last:pb-1 hover:bg-[var(--paper)]/60";
+  const body = (
+    <>
       <span className="min-w-0 truncate font-sans text-sm text-[var(--ink)]">{name}</span>
       <span className="shrink-0 font-mono text-sm tabular-nums text-[var(--signal)]">
         {metric}
       </span>
-    </Link>
+    </>
+  );
+  if (!href) return <div className={rowClass}>{body}</div>;
+  return (
+    <RepoLink href={href} repo={repo} className={rowClass}>
+      {body}
+    </RepoLink>
   );
 }
 
@@ -178,7 +192,7 @@ export function MomentumWindowTabs({
   return (
     <div className="flex gap-3 font-mono text-[10px] uppercase tracking-[0.14em]">
       {tabs.map((t) => (
-        <Link
+        <AppLink
           key={t.days}
           href={t.days === 30 ? "/" : `/?m=${t.days}d`}
           scroll={false}
@@ -189,7 +203,7 @@ export function MomentumWindowTabs({
           }
         >
           {t.label}
-        </Link>
+        </AppLink>
       ))}
     </div>
   );

@@ -1,18 +1,36 @@
 import { EmptyState, RepoCard, SectionRule } from "@/components/repo-card";
+import { PageShell } from "@/components/page-shell";
 import { TimelineBars } from "@/components/charts";
+import { cacheReadModel } from "@/lib/data/cache";
 import { formatDate, getReposForDate, getTimeline } from "@/lib/queries";
 import Link from "next/link";
 
-export const dynamic = "force-dynamic";
+export default function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
+  return (
+    <PageShell>
+      <TimelinePage searchParams={searchParams} />
+    </PageShell>
+  );
+}
 
-export default async function TimelinePage({
+async function TimelinePage({
   searchParams,
 }: {
   searchParams: Promise<{ date?: string }>;
 }) {
   const params = await searchParams;
+  return <CachedTimeline date={params.date ?? ""} />;
+}
+
+async function CachedTimeline({ date }: { date: string }) {
+  "use cache";
+  cacheReadModel("catalog", "hours");
   const timeline = await getTimeline(45);
-  const selected = params.date || timeline[0]?.discovery_date;
+  const selected = date || timeline[0]?.discovery_date;
   const dayRepos = selected ? await getReposForDate(selected) : [];
 
   return (

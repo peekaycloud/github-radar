@@ -1,20 +1,8 @@
-"use client";
-
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
-
-const NAV = [
-  { href: "/", label: "Radar" },
-  { href: "/timeline", label: "Discoveries" },
-  { href: "/trending", label: "Trending" },
-  { href: "/hidden-gems", label: "Hidden Gems" },
-  { href: "/trends", label: "Trends" },
-];
+import { Suspense } from "react";
+import { SiteNav, SiteNavFallback } from "@/components/site-nav";
 
 export function SiteHeader() {
-  const pathname = usePathname();
-
   return (
     <header className="border-b-2 border-[var(--rule-strong)] bg-[var(--paper)]/95 backdrop-blur-[2px]">
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 sm:px-6">
@@ -42,39 +30,9 @@ export function SiteHeader() {
             />
           </form>
         </div>
-        <nav className="flex flex-wrap gap-x-5 gap-y-2 border-t border-[var(--rule)] pt-2.5">
-          {NAV.map((item) => {
-            const active =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname === item.href || pathname.startsWith(`${item.href}/`);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "font-mono text-[11px] uppercase tracking-[0.16em] transition-colors",
-                  active
-                    ? "text-[var(--signal)]"
-                    : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
-                )}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-          <Link
-            href="/ahead-of-curve"
-            className={cn(
-              "ml-auto font-mono text-[11px] uppercase tracking-[0.16em] transition-colors",
-              pathname.startsWith("/ahead-of-curve")
-                ? "text-[var(--signal)]"
-                : "text-[var(--ink-faint)] hover:text-[var(--signal)]"
-            )}
-          >
-            Ahead of Curve →
-          </Link>
-        </nav>
+        <Suspense fallback={<SiteNavFallback />}>
+          <SiteNav />
+        </Suspense>
       </div>
     </header>
   );

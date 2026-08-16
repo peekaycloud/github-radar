@@ -84,6 +84,11 @@ async def run_pipeline(
 
     if dry_run or skip_enrich:
         print("\nSkipping enrichment.")
+        if not dry_run:
+            print("\n=== Refreshing read models ===")
+            from scripts.refresh_read_models import refresh_read_models
+
+            refresh_read_models()
         return
 
     print("\n=== 2/3 GitHub public-page enrichment ===")
@@ -95,6 +100,10 @@ async def run_pipeline(
     from scripts.classify_categories import run as classify_run
 
     classify_run(limit=max(enrich_limit * 2, 200), dry_run=False)
+    print("\n=== Refreshing read models ===")
+    from scripts.refresh_read_models import refresh_read_models
+
+    refresh_read_models()
     print("\nPipeline complete.")
 
 

@@ -1,8 +1,8 @@
 import { EmptyState, RepoCard, SectionRule } from "@/components/repo-card";
+import { PageShell } from "@/components/page-shell";
+import { cacheReadModel } from "@/lib/data/cache";
 import { getTrending } from "@/lib/queries";
 import Link from "next/link";
-
-export const dynamic = "force-dynamic";
 
 const WINDOWS = [
   { key: "1d", label: "24 hours" },
@@ -11,7 +11,19 @@ const WINDOWS = [
   { key: "all", label: "All time" },
 ] as const;
 
-export default async function TrendingPage({
+export default function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ window?: string; page?: string }>;
+}) {
+  return (
+    <PageShell>
+      <TrendingPage searchParams={searchParams} />
+    </PageShell>
+  );
+}
+
+async function TrendingPage({
   searchParams,
 }: {
   searchParams: Promise<{ window?: string; page?: string }>;
@@ -23,7 +35,19 @@ export default async function TrendingPage({
       | "7d"
       | "30d"
       | "all") ?? "7d";
-  const page = Math.max(1, Number(params.page || 1));
+  const page = Math.max(1, Number(params.page || 1) || 1);
+  return <CachedTrending window={window} page={page} />;
+}
+
+async function CachedTrending({
+  window,
+  page,
+}: {
+  window: "1d" | "7d" | "30d" | "all";
+  page: number;
+}) {
+  "use cache";
+  cacheReadModel("catalog", "hours");
   const limit = 40;
   const rows = await getTrending(window, limit, (page - 1) * limit);
 
@@ -31,8 +55,9 @@ export default async function TrendingPage({
     <div className="space-y-8">
       <SectionRule title="Trending" kicker="Momentum" />
       <p className="max-w-2xl font-sans text-sm text-[var(--ink-muted)]">
-        Ranked by star growth where snapshots exist, with discovery score as a
-        secondary signal. Fresh enrichment improves this view over time.
+        Ranked by star gain between snapshots. If we don’t yet have a capture
+        from 7 or 30 days ago, the oldest snapshot is the baseline — that
+        history only started this month.
       </p>
       <div className="flex flex-wrap gap-2">
         {WINDOWS.map((w) => (

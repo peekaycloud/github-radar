@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
+import { Suspense } from "react";
 import { GrowthPanel } from "@/components/charts";
+import { PageShell } from "@/components/page-shell";
+import { RepoHeading, RepoMeta } from "@/components/repo-heading";
 import {
   formatDate,
   formatNumber,
@@ -9,11 +11,24 @@ import {
   getRepoSnapshots,
   getRepository,
 } from "@/lib/queries";
+import { cacheReadModel } from "@/lib/data/cache";
+import type { DiscoveryRow } from "@/lib/db";
+import { AppLink } from "@/components/app-link";
 import { buildWhyItMatters, signalLevel } from "@/lib/signals";
 
-export const dynamic = "force-dynamic";
+export default function Page({
+  params,
+}: {
+  params: Promise<{ owner: string; repo: string }>;
+}) {
+  return (
+    <PageShell>
+      <RepoDetailPage params={params} />
+    </PageShell>
+  );
+}
 
-export default async function RepoDetailPage({
+async function RepoDetailPage({
   params,
 }: {
   params: Promise<{ owner: string; repo: string }>;
@@ -22,6 +37,33 @@ export default async function RepoDetailPage({
   const repository = await getRepository(owner, repo);
   if (!repository) notFound();
 
+  return (
+    <div className="space-y-12">
+      <RepoHeading repository={repository} owner={owner} repo={repo} />
+
+      <Suspense fallback={<SectionPlaceholder label="Loading discovery details…" />}>
+        <RepoIntelligence repository={repository} />
+      </Suspense>
+
+      <p>
+        <AppLink
+          href="/repositories"
+          className="font-sans text-xs uppercase tracking-[0.14em] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+        >
+          ← Back to repositories
+        </AppLink>
+      </p>
+    </div>
+  );
+}
+
+async function RepoIntelligence({
+  repository,
+}: {
+  repository: DiscoveryRow;
+}) {
+  "use cache";
+  cacheReadModel("repo", "hours");
   const [mentions, snapshots, categories] = await Promise.all([
     getRepoMentions(repository.repository_id),
     getRepoSnapshots(repository.repository_id),
@@ -44,46 +86,19 @@ export default async function RepoDetailPage({
   const level = signalLevel(repository);
 
   return (
-    <div className="space-y-12">
-      <header className="border-b border-[var(--rule)] pb-8">
-        <p className="font-sans text-[11px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
-          Repository
-        </p>
-        <h1 className="mt-2 font-serif text-4xl text-[var(--ink)] sm:text-5xl">
-          {repository.full_name}
-        </h1>
-        {repository.description ? (
-          <p className="mt-4 max-w-3xl font-sans text-base leading-relaxed text-[var(--ink-muted)]">
-            {repository.description}
-          </p>
-        ) : null}
-        <div className="mt-5 flex flex-wrap gap-4 font-sans text-sm text-[var(--ink-muted)]">
-          <a
-            href={repository.github_url || `https://github.com/${owner}/${repo}`}
-            target="_blank"
-            rel="noreferrer"
-            className="underline decoration-[var(--rule)] underline-offset-4 hover:text-[var(--ink)]"
-          >
-            View on GitHub
-          </a>
-          <span>★ {formatNumber(repository.stars)}</span>
-          <span>⑂ {formatNumber(repository.forks)}</span>
-          {repository.language ? <span>{repository.language}</span> : null}
-          {repository.license ? <span>{repository.license}</span> : null}
+    <>
+      {categories.length ? (
+        <div className="-mt-8 flex flex-wrap gap-2">
+          {categories.map((c) => (
+            <span
+              key={c.slug}
+              className="border border-[var(--rule)] px-2 py-0.5 font-sans text-[10px] uppercase tracking-[0.12em] text-[var(--ink-muted)]"
+            >
+              {c.name}
+            </span>
+          ))}
         </div>
-        {categories.length ? (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {categories.map((c) => (
-              <span
-                key={c.slug}
-                className="border border-[var(--rule)] px-2 py-0.5 font-sans text-[10px] uppercase tracking-[0.12em] text-[var(--ink-muted)]"
-              >
-                {c.name}
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </header>
+      ) : null}
 
       <section className="border-2 border-[var(--rule-strong)] border-l-[3px] border-l-[var(--signal)] bg-[var(--paper-elevated)] px-5 py-5">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -118,35 +133,6 @@ export default async function RepoDetailPage({
             </li>
           ))}
         </ul>
-        {repository.stars_at_discovery != null && repository.stars != null ? (
-          <p className="mt-4 font-mono text-sm tabular-nums text-[var(--ink)]">
-            <span className="text-[var(--ink-faint)]">Stars at discovery → now · </span>
-            {formatNumber(repository.stars_at_discovery)} → {formatNumber(repository.stars)}
-          </p>
-        ) : null}
-      </section>
-
-      <section className="grid gap-8 lg:grid-cols-3">
-        <Meta
-          label="Repository age"
-          value={
-            repository.created_at_github
-              ? `Since ${formatDate(repository.created_at_github)}`
-              : "Unknown"
-          }
-        />
-        <Meta
-          label="Last activity"
-          value={formatDate(repository.pushed_at_github)}
-        />
-        <Meta
-          label="Early discovery"
-          value={
-            repository.days_to_discovery != null
-              ? `${Math.round(repository.days_to_discovery)}d after creation`
-              : "—"
-          }
-        />
       </section>
 
       <section>
@@ -154,9 +140,9 @@ export default async function RepoDetailPage({
           Telegram Discovery
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Meta label="First discovered" value={formatDate(repository.first_discovered_at)} />
-          <Meta label="Last seen on channel" value={formatDate(repository.last_mentioned_at)} />
-          <Meta
+          <RepoMeta label="First discovered" value={formatDate(repository.first_discovered_at)} />
+          <RepoMeta label="Last seen on channel" value={formatDate(repository.last_mentioned_at)} />
+          <RepoMeta
             label="Days to discovery"
             value={
               repository.days_to_discovery != null
@@ -220,45 +206,19 @@ export default async function RepoDetailPage({
             <p>Creation date not yet enriched — discovery lag unavailable.</p>
           )}
           <p>
-            Stars at discovery:{" "}
-            <strong className="text-[var(--ink)]">
-              {formatNumber(repository.stars_at_discovery)}
-            </strong>
-          </p>
-          <p>
             Current stars:{" "}
             <strong className="text-[var(--ink)]">{formatNumber(repository.stars)}</strong>
           </p>
-          {repository.discovery_score != null ? (
-            <p>
-              Discovery score:{" "}
-              <strong className="text-[var(--ink)]">
-                {repository.discovery_score.toFixed(3)}
-              </strong>
-            </p>
-          ) : null}
         </div>
       </section>
-
-      <p>
-        <Link
-          href="/repositories"
-          className="font-sans text-xs uppercase tracking-[0.14em] text-[var(--ink-muted)] hover:text-[var(--ink)]"
-        >
-          ← Back to repositories
-        </Link>
-      </p>
-    </div>
+    </>
   );
 }
 
-function Meta({ label, value }: { label: string; value: string }) {
+function SectionPlaceholder({ label }: { label: string }) {
   return (
-    <div className="border border-[var(--rule)] bg-[var(--paper-elevated)] px-4 py-4">
-      <p className="font-sans text-[10px] uppercase tracking-[0.16em] text-[var(--ink-faint)]">
-        {label}
-      </p>
-      <p className="mt-2 font-serif text-lg text-[var(--ink)]">{value}</p>
-    </div>
+    <p className="border border-dashed border-[var(--rule)] px-4 py-8 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-faint)]">
+      {label}
+    </p>
   );
 }

@@ -161,3 +161,20 @@
 .animate-metric {
   animation: metric-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+@keyframes nav-progress {
+  0% {
+    transform: scaleX(0.08);
+  }
+  40% {
+    transform: scaleX(0.55);
+  }
+  100% {
+    transform: scaleX(0.88);
+  }
+}
+
+.nav-progress-run {
+  width: 100%;
+  animation: nav-progress 8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
