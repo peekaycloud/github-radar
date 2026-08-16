@@ -141,7 +141,7 @@ def parse_repo_html(html: str, *, owner: str, repo: str) -> EnrichmentResult:
             result.description = desc_el.get_text(" ", strip=True) or None
 
     # Social counts via #repo-stars-counter-star etc.
-    # Prefer title/aria-label (exact "364,110") over visible "364k".
+    # Prefer title/aria-label (exact "364,110") over visible "365k".
     for attr, field_name in (
         ("#repo-stars-counter-star", "stars"),
         ("#repo-network-counter", "forks"),
@@ -151,6 +151,13 @@ def parse_repo_html(html: str, *, owner: str, repo: str) -> EnrichmentResult:
         if el:
             raw = el.get("title") or el.get("aria-label") or el.get_text()
             setattr(result, field_name, _parse_count(raw))
+
+    count_match = re.search(r'"stargazerCount"\s*:\s*(\d+)', html)
+    if count_match:
+        result.stars = int(count_match.group(1))
+    fork_match = re.search(r'"forkCount"\s*:\s*(\d+)', html)
+    if fork_match:
+        result.forks = int(fork_match.group(1))
 
     # Fallback: aria-label counters in sidebar
     if result.stars is None:
@@ -319,7 +326,7 @@ class GitHubEnricher:
         stop=stop_after_attempt(5),
         reraise=True,
     )
-    async def fetch(self, client: httpx.AsyncClient, url: str) -> str:
+    async def fetch(self, client: httpx.AsyncClient, url: str) -> httpx.Response:
         await self._throttle()
         resp = await client.get(url, follow_redirects=True)
         if resp.status_code == 429:
@@ -331,14 +338,19 @@ class GitHubEnricher:
         if resp.status_code == 404:
             raise FileNotFoundError(f"404 for {url}")
         resp.raise_for_status()
-        return resp.text
+        return resp
 
     async def enrich_one(
         self, client: httpx.AsyncClient, owner: str, repo: str
     ) -> EnrichmentResult:
         url = f"https://github.com/{owner}/{repo}"
-        html = await self.fetch(client, url)
-        return parse_repo_html(html, owner=owner, repo=repo)
+        resp = await self.fetch(client, url)
+        result = parse_repo_html(resp.text, owner=owner, repo=repo)
+        path = [p for p in resp.url.path.split("/") if p]
+        if len(path) >= 2:
+            result.owner = path[0]
+            result.repo_name = path[1]
+        return result
 
 
 def select_enrichment_queue(limit: int) -> list[dict[str, Any]]:
@@ -374,7 +386,7 @@ def select_enrichment_queue(limit: int) -> list[dict[str, Any]]:
       WHERE r.owner IS NOT NULL AND r.repo_name IS NOT NULL
         AND r.enrichment_status = 'success'
         AND r.stars IS NOT NULL
-        AND r.last_enriched_at < NOW() - INTERVAL '12 hours'
+        AND r.last_enriched_at < NOW() - INTERVAL '3 hours'
       ORDER BY COALESCE(r.stars, 0) DESC, r.last_enriched_at ASC
       LIMIT %s
     """
@@ -390,7 +402,7 @@ def select_enrichment_queue(limit: int) -> list[dict[str, Any]]:
         AND COALESCE(r.stars, 0) >= 50
         AND (
           r.last_enriched_at IS NULL
-          OR r.last_enriched_at < NOW() - INTERVAL '4 hours'
+          OR r.last_enriched_at < NOW() - INTERVAL '3 hours'
         )
       ORDER BY
         (
