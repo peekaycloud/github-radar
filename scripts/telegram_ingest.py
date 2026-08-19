@@ -111,7 +111,7 @@ def is_newer_than_watermark(
     return True
 
 
-async def ingest(*, dry_run: bool, batch_size: int, channel: str) -> None:
+async def ingest(*, dry_run: bool, batch_size: int, channel: str) -> list[str]:
     api_id = int(require_env("TELEGRAM_API_ID"))
     api_hash = require_env("TELEGRAM_API_HASH")
     session = os.getenv("TELEGRAM_SESSION", "telegram_scraper")
@@ -134,6 +134,7 @@ async def ingest(*, dry_run: bool, batch_size: int, channel: str) -> None:
     max_message_id = last_id or 0
     max_posted_at = last_posted
     pending_batch: list = []
+    mentioned_ids: set[str] = set()
 
     run_id = None
     if not dry_run:
@@ -200,7 +201,7 @@ async def ingest(*, dry_run: bool, batch_size: int, channel: str) -> None:
                 print(f"[dry-run] msg={message.id} at={message.date} repos={urls[:3]}")
             print(f"Dry-run: would process {len(pending_batch)} messages")
             await client.disconnect()
-            return
+            return []
 
         if not pending_batch:
             if run_id:
@@ -230,7 +231,7 @@ async def ingest(*, dry_run: bool, batch_size: int, channel: str) -> None:
                             )
                         conn.commit()
             print("No new messages since watermark — nothing to ingest.")
-            return
+            return []
 
         for i in range(0, len(pending_batch), batch_size):
             chunk = pending_batch[i : i + batch_size]
@@ -265,6 +266,7 @@ async def ingest(*, dry_run: bool, batch_size: int, channel: str) -> None:
                                     repo_name=norm.repo_name,
                                     full_name=norm.full_name,
                                 )
+                                mentioned_ids.add(str(repo_id))
                                 if inserted:
                                     new_repositories += 1
                                 upsert_mention(
@@ -335,6 +337,7 @@ async def ingest(*, dry_run: bool, batch_size: int, channel: str) -> None:
             f"  watermark_posted_at={max_posted_at}\n"
             f"  cursor_message_id={max_message_id}"
         )
+        return list(mentioned_ids)
     except Exception as exc:
         if run_id:
             with get_connection() as conn:

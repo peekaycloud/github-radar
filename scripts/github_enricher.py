@@ -353,20 +353,65 @@ class GitHubEnricher:
         return result
 
 
-def select_enrichment_queue(limit: int) -> list[dict[str, Any]]:
-    """Split each batch so backfill cannot starve star refreshes.
+_QUEUE_COLS = """
+      r.id, r.owner, r.repo_name, r.full_name, r.github_url, r.stars,
+      r.last_enriched_at, r.enrichment_status
+"""
 
-    The 20k never-enriched backlog used to consume every run (priority 100),
-    so Ahead of Curve / Trending repos never got a second star capture.
+
+def select_enrichment_queue(
+    limit: int, *, prefer_ids: list[str] | None = None
+) -> list[dict[str, Any]]:
+    """New Telegram finds first, then discovery baselines, then backlog.
+
+    Today's Radar shows Enriching… until `stars` is set. A 15k pending
+    catalog used to consume every batch (ORDER BY stars DESC), so new
+    unstarred repos never got a first scrape.
     """
     limit = max(int(limit), 1)
-    ahead_n = max(limit // 3, 1)
-    first_n = max(limit // 2, 1)
-    refresh_n = max(limit - first_n - ahead_n, 1)
+    # Daily scrape only adds a handful of repos; reserve real slots for them.
+    fresh_n = min(max(limit // 2, 16), 80)
+    rest = max(limit - fresh_n, 1)
+    baseline_n = max(rest // 3, 1)
+    refresh_n = max(rest // 3, 1)
+    first_n = max(rest - baseline_n - refresh_n, 1)
 
-    first_sql = """
-      SELECT r.id, r.owner, r.repo_name, r.full_name, r.github_url, r.stars,
-             r.last_enriched_at, r.enrichment_status, 100 AS priority
+    prefer_sql = f"""
+      SELECT {_QUEUE_COLS}, 250 AS priority
+      FROM repositories r
+      WHERE r.id = ANY(%s::uuid[])
+        AND r.owner IS NOT NULL AND r.repo_name IS NOT NULL
+      ORDER BY (r.stars IS NULL) DESC, r.created_at DESC
+    """
+    fresh_sql = f"""
+      SELECT {_QUEUE_COLS}, 200 AS priority
+      FROM repositories r
+      WHERE r.owner IS NOT NULL AND r.repo_name IS NOT NULL
+        AND r.stars IS NULL
+        AND r.created_at >= NOW() - INTERVAL '14 days'
+        AND (
+          r.last_enriched_at IS NULL
+          OR r.last_enriched_at < NOW() - INTERVAL '12 hours'
+        )
+      ORDER BY r.created_at DESC
+      LIMIT %s
+    """
+    baseline_sql = f"""
+      SELECT {_QUEUE_COLS}, 120 AS priority
+      FROM repositories r
+      WHERE r.owner IS NOT NULL AND r.repo_name IS NOT NULL
+        AND r.stars_at_discovery IS NULL
+        AND (
+          SELECT MIN(COALESCE(m.discovered_at, p.posted_at))
+          FROM telegram_repo_mentions m
+          JOIN telegram_posts p ON p.id = m.telegram_post_id
+          WHERE m.repository_id = r.id
+        ) >= NOW() - INTERVAL '7 days'
+      ORDER BY r.created_at DESC
+      LIMIT %s
+    """
+    first_sql = f"""
+      SELECT {_QUEUE_COLS}, 100 AS priority
       FROM repositories r
       WHERE r.owner IS NOT NULL AND r.repo_name IS NOT NULL
         AND (
@@ -376,45 +421,23 @@ def select_enrichment_queue(limit: int) -> list[dict[str, Any]]:
           OR r.stars IS NULL
           OR r.created_at_github IS NULL
         )
-      ORDER BY r.last_enriched_at NULLS FIRST, COALESCE(r.stars, 0) DESC
+      ORDER BY
+        (r.stars IS NULL) DESC,
+        r.created_at DESC,
+        r.last_enriched_at NULLS FIRST
       LIMIT %s
     """
-    refresh_sql = """
-      SELECT r.id, r.owner, r.repo_name, r.full_name, r.github_url, r.stars,
-             r.last_enriched_at, r.enrichment_status, 70 AS priority
+    refresh_sql = f"""
+      SELECT {_QUEUE_COLS}, 70 AS priority
       FROM repositories r
       WHERE r.owner IS NOT NULL AND r.repo_name IS NOT NULL
         AND r.enrichment_status = 'success'
         AND r.stars IS NOT NULL
         AND r.last_enriched_at < NOW() - INTERVAL '3 hours'
-      ORDER BY COALESCE(r.stars, 0) DESC, r.last_enriched_at ASC
-      LIMIT %s
-    """
-    ahead_sql = """
-      SELECT r.id, r.owner, r.repo_name, r.full_name, r.github_url, r.stars,
-             r.last_enriched_at, r.enrichment_status, 85 AS priority
-      FROM mv_repository_discovery disc
-      JOIN repositories r ON r.id = disc.repository_id
-      WHERE r.owner IS NOT NULL AND r.repo_name IS NOT NULL
-        AND r.created_at_github IS NOT NULL
-        AND disc.days_to_discovery IS NOT NULL
-        AND disc.days_to_discovery >= 0
-        AND COALESCE(r.stars, 0) >= 50
-        AND (
-          r.last_enriched_at IS NULL
-          OR r.last_enriched_at < NOW() - INTERVAL '3 hours'
-        )
       ORDER BY
-        (
-          EXP(-GREATEST(disc.days_to_discovery, 0) / 45.0)
-          * LN(1 + COALESCE(disc.mention_count, 1))
-          * LN(1 + COALESCE(r.stars, 0))
-          * CASE
-              WHEN disc.days_to_discovery <= 30 THEN 1.4
-              WHEN disc.days_to_discovery <= 90 THEN 1.15
-              ELSE 1.0
-            END
-        ) DESC
+        (r.stars_at_discovery IS NOT NULL) DESC,
+        COALESCE(r.stars, 0) DESC,
+        r.last_enriched_at ASC
       LIMIT %s
     """
 
@@ -422,12 +445,19 @@ def select_enrichment_queue(limit: int) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     with get_connection() as conn:
         with conn.cursor() as cur:
-            for query, n in (
-                (ahead_sql, ahead_n),
-                (refresh_sql, refresh_n),
-                (first_sql, first_n),
-            ):
-                cur.execute(query, (n,))
+            batches: list[tuple[str, tuple[Any, ...]]] = []
+            if prefer_ids:
+                batches.append((prefer_sql, (prefer_ids,)))
+            batches.extend(
+                (
+                    (fresh_sql, (fresh_n,)),
+                    (baseline_sql, (baseline_n,)),
+                    (refresh_sql, (refresh_n,)),
+                    (first_sql, (first_n,)),
+                )
+            )
+            for query, params in batches:
+                cur.execute(query, params)
                 for row in cur.fetchall():
                     rid = str(row["id"])
                     if rid in seen:
@@ -536,6 +566,27 @@ def persist_enrichment(repository_id: str, result: EnrichmentResult, *, success:
                         repository_id,
                     ),
                 )
+                # Freeze stars at first Telegram mention once, only if we
+                # scraped close enough to discovery that the count is real.
+                if result.stars is not None:
+                    cur.execute(
+                        """
+                        UPDATE repositories r
+                        SET
+                          stars_at_discovery = %s,
+                          stars_at_discovery_at = NOW()
+                        WHERE r.id = %s::uuid
+                          AND r.stars_at_discovery IS NULL
+                          AND (
+                            SELECT MIN(COALESCE(m.discovered_at, p.posted_at))
+                            FROM telegram_repo_mentions m
+                            JOIN telegram_posts p ON p.id = m.telegram_post_id
+                            WHERE m.repository_id = r.id
+                          ) BETWEEN NOW() - INTERVAL '7 days'
+                            AND NOW() + INTERVAL '2 days'
+                        """,
+                        (result.stars, repository_id),
+                    )
                 if result.stars is not None and should_write_snapshot(
                     cur,
                     repository_id,
@@ -577,10 +628,15 @@ def persist_enrichment(repository_id: str, result: EnrichmentResult, *, success:
             conn.commit()
 
 
-async def run_enrichment(*, limit: int, dry_run: bool) -> None:
+async def run_enrichment(
+    *,
+    limit: int,
+    dry_run: bool,
+    prefer_ids: list[str] | None = None,
+) -> None:
     concurrency = int(os.getenv("ENRICH_CONCURRENCY", "2"))
     delay = float(os.getenv("ENRICH_DELAY_SECONDS", "1.5"))
-    queue = select_enrichment_queue(limit)
+    queue = select_enrichment_queue(limit, prefer_ids=prefer_ids)
     print(f"Enrichment queue size: {len(queue)} (limit={limit})")
     if not queue:
         return

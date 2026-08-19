@@ -68,6 +68,7 @@ async def run_pipeline(
     batch_size = int(os.getenv("INGEST_BATCH_SIZE", "100"))
 
     print(f"=== 1/3 Telegram ingest ({len(channels)} channel(s)) ===")
+    mentioned_ids: list[str] = []
     for channel in channels:
         needs_backfill = backfill_missing and not channel_has_watermark(channel)
         if needs_backfill:
@@ -80,7 +81,9 @@ async def run_pipeline(
             )
         else:
             print(f"\n--- Delta ingest: @{channel} ---")
-            await ingest(dry_run=dry_run, batch_size=batch_size, channel=channel)
+            mentioned_ids.extend(
+                await ingest(dry_run=dry_run, batch_size=batch_size, channel=channel)
+            )
 
     if dry_run or skip_enrich:
         print("\nSkipping enrichment.")
@@ -94,7 +97,9 @@ async def run_pipeline(
     print("\n=== 2/3 GitHub public-page enrichment ===")
     from scripts.github_enricher import run_enrichment
 
-    await run_enrichment(limit=enrich_limit, dry_run=False)
+    await run_enrichment(
+        limit=enrich_limit, dry_run=False, prefer_ids=mentioned_ids or None
+    )
 
     print("\n=== 3/3 Category classification ===")
     from scripts.classify_categories import run as classify_run
