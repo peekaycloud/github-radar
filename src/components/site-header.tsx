@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { SiteNav, SiteNavFallback } from "@/components/site-nav";
 
+export const SOURCE_REPO_URL = "https://github.com/peekaycloud/github-radar";
+
 export function SiteHeader() {
   return (
     <header className="border-b-2 border-[var(--rule-strong)] bg-[var(--paper)]/95 backdrop-blur-[2px]">
@@ -21,14 +23,24 @@ export function SiteHeader() {
               Open-source projects worth watching.
             </p>
           </div>
-          <form action="/repositories" method="get" className="w-full sm:w-56">
-            <input
-              type="search"
-              name="q"
-              placeholder="Search archive…"
-              className="w-full border border-[var(--rule-strong)] bg-[var(--paper-elevated)] px-3 py-1.5 font-sans text-sm text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)] focus:border-[var(--signal)]"
-            />
-          </form>
+          <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
+            <a
+              href={SOURCE_REPO_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--signal)] hover:underline"
+            >
+              ★ Star on GitHub
+            </a>
+            <form action="/repositories" method="get" className="w-full sm:w-56">
+              <input
+                type="search"
+                name="q"
+                placeholder="Search archive…"
+                className="w-full border border-[var(--rule-strong)] bg-[var(--paper-elevated)] px-3 py-1.5 font-sans text-sm text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)] focus:border-[var(--signal)]"
+              />
+            </form>
+          </div>
         </div>
         <Suspense fallback={<SiteNavFallback />}>
           <SiteNav />
@@ -41,9 +53,23 @@ export function SiteHeader() {
 export function SiteFooter() {
   return (
     <footer className="mt-auto border-t-2 border-[var(--rule-strong)]">
-      <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-7 font-sans text-xs text-[var(--ink-muted)] sm:flex-row sm:justify-between sm:px-6">
-        <p className="font-medium tracking-wide text-[var(--ink)]">GitHub Radar</p>
-        <p>Discovery intelligence · Telegram × GitHub</p>
+      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-7 font-sans text-xs text-[var(--ink-muted)] sm:flex-row sm:items-end sm:justify-between sm:px-6">
+        <div className="space-y-1">
+          <p className="font-medium tracking-wide text-[var(--ink)]">GitHub Radar</p>
+          <p>Discovery intelligence · Telegram × GitHub</p>
+        </div>
+        <p className="max-w-sm sm:text-right">
+          This site is open source.{" "}
+          <a
+            href={SOURCE_REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[var(--ink)] underline decoration-[var(--rule)] underline-offset-4 hover:text-[var(--signal)] hover:decoration-[var(--signal)]"
+          >
+            Read the original code
+          </a>{" "}
+          and star the repo if Radar is useful.
+        </p>
       </div>
     </footer>
   );
